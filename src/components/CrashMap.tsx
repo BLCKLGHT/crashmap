@@ -205,16 +205,9 @@ const getNormalisedHeading = (heading?: number): number | null => {
 };
 
 const canRotateLeafletPane = (): boolean => {
-  if (typeof navigator === "undefined") return false;
-
-  const userAgent = navigator.userAgent;
-  const isIos =
-    /iPad|iPhone|iPod/.test(userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-  // iOS Chrome/Firefox/Edge still use WebKit, and rotating Leaflet's tile pane
-  // exposes unloaded tile areas on real devices. Keep the map north-up there.
-  return !isIos;
+  // Leaflet's tile renderer is not designed for rotating the internal map pane.
+  // Drive Mode stays north-up and uses the blue direction marker for bearing.
+  return false;
 };
 
 const getMapPane = (map: L.Map): HTMLElement | null => {
@@ -242,7 +235,7 @@ const applyMapBearing = (map: L.Map, bearing: number): void => {
   const baseTransform = stripBearingTransform(pane.style.transform || "");
   const size = map.getSize();
   pane.style.transformOrigin = `${size.x / 2}px ${size.y / 2}px`;
-  pane.style.transition = "transform 420ms ease-out";
+  pane.style.transition = "none";
 
   if (Math.abs(bearing) < 0.1) {
     pane.style.transform = baseTransform;
