@@ -168,6 +168,7 @@ function App() {
   const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [isSimulationDriving, setIsSimulationDriving] = useState(false);
   const [driveLocation, setDriveLocation] = useState<DriveLocation | null>(null);
+  const [compassHeading, setCompassHeading] = useState<number | null>(null);
   const [driveError, setDriveError] = useState<string | null>(null);
   const hasStartedInitialLoad = useRef(false);
   const playbackIntervalRef = useRef<number | null>(null);
@@ -390,11 +391,9 @@ function App() {
                 position.coords.longitude,
               )
             : undefined;
-        const heading = compassHeadingRef.current ?? gpsHeading ?? derivedHeading ?? previous?.heading;
+        const heading = gpsHeading ?? derivedHeading ?? previous?.heading;
         const headingSource =
-          compassHeadingRef.current !== null
-            ? "compass"
-            : gpsHeading !== undefined
+          gpsHeading !== undefined
               ? "gps"
               : derivedHeading !== undefined
                 ? "movement"
@@ -557,15 +556,7 @@ function App() {
         return;
       }
 
-      setDriveLocation((currentLocation) =>
-        currentLocation
-          ? {
-              ...currentLocation,
-              heading: nextHeading,
-              headingSource: "compass",
-            }
-          : currentLocation,
-      );
+      setCompassHeading(nextHeading);
     };
 
     window.addEventListener("deviceorientationabsolute", handleOrientation);
@@ -591,6 +582,7 @@ function App() {
     setDriveError(null);
     setIsSimulationMode(false);
     setIsSimulationDriving(false);
+    setCompassHeading(null);
     compassHeadingRef.current = null;
     lastCompassUpdateRef.current = 0;
 
@@ -616,6 +608,7 @@ function App() {
     setIsSimulationMode(true);
     setIsDriveModeActive(true);
     setIsSimulationDriving(false);
+    setCompassHeading(null);
     simulationSegmentRef.current = 0;
     simulationSegmentMetresRef.current = 0;
     setDriveLocation((currentLocation) => ({
@@ -639,6 +632,7 @@ function App() {
     setIsSimulationMode(false);
     setIsSimulationDriving(false);
     setDriveLocation(null);
+    setCompassHeading(null);
     lastGpsLocationRef.current = null;
     lastGpsUpdateRef.current = 0;
     compassHeadingRef.current = null;
@@ -653,6 +647,17 @@ function App() {
   const mapCrashes =
     isDriveModeActive && driveRisk ? driveRisk.nearbyCrashes : filteredCrashes;
 
+  const displayedDriveLocation = useMemo<DriveLocation | null>(() => {
+    if (!driveLocation) return null;
+    if (isSimulationMode || compassHeading === null) return driveLocation;
+
+    return {
+      ...driveLocation,
+      heading: compassHeading,
+      headingSource: "compass",
+    };
+  }, [compassHeading, driveLocation, isSimulationMode]);
+
   return (
     <main
       className={`app ${isChromeHidden ? "app--chrome-hidden" : ""} ${
@@ -666,7 +671,7 @@ function App() {
         driveMode={{
           isActive: isDriveModeActive,
           isSimulation: isSimulationMode,
-          location: driveLocation,
+          location: displayedDriveLocation,
           nearbyCrashes: driveRisk?.nearbyCrashes ?? [],
           onSimulatedLocationChange: (location) => {
             if (!isSimulationMode) return;
@@ -713,7 +718,7 @@ function App() {
       <DriveModePanel
         isActive={isDriveModeActive}
         isSimulation={isSimulationMode}
-        location={driveLocation}
+        location={displayedDriveLocation}
         risk={driveRisk}
         error={driveError}
         onStart={startDriveMode}
