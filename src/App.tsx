@@ -36,6 +36,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const crashTimeCache = new WeakMap<CrashRecord, number | null>();
 const COMPASS_UPDATE_INTERVAL_MS = 220;
 const COMPASS_HEADING_EASING = 0.12;
+const GPS_MIN_UPDATE_INTERVAL_MS = 900;
+const GPS_MAX_ACCURACY_METRES = 85;
+const GPS_JITTER_METRES = 9;
+const GPS_POSITION_EASING = 0.38;
 const SIMULATION_STEP_MS = 250;
 const SIMULATION_SPEED_MPS = 13.9;
 
@@ -173,6 +177,7 @@ function App() {
   const simulationSegmentMetresRef = useRef(0);
   const simulationLastTickRef = useRef(0);
   const lastGpsLocationRef = useRef<DriveLocation | null>(null);
+  const lastGpsUpdateRef = useRef(0);
   const compassHeadingRef = useRef<number | null>(null);
   const lastCompassUpdateRef = useRef(0);
 
@@ -290,11 +295,6 @@ function App() {
     [dataState.crashes, filters],
   );
 
-  const crashSpatialIndex = useMemo(
-    () => createCrashSpatialIndex(dataState.crashes),
-    [dataState.crashes],
-  );
-
   const filteredCrashes = useMemo(() => {
     if (!timeline) return attributeFilteredCrashes;
 
@@ -309,6 +309,11 @@ function App() {
       return time !== null && time >= lowerTime && time < upperTime;
     });
   }, [attributeFilteredCrashes, timeline]);
+
+  const crashSpatialIndex = useMemo(
+    () => createCrashSpatialIndex(filteredCrashes),
+    [filteredCrashes],
+  );
 
   const displayTime = useMemo(() => {
     if (!timeline?.isPlaybackView || !filteredCrashes.length) return timeline?.playheadTime;
@@ -342,11 +347,32 @@ function App() {
     setDriveError(null);
     geolocationWatchRef.current = navigator.geolocation.watchPosition(
       (position) => {
+        const now = Date.now();
+        const accuracy =
+          typeof position.coords.accuracy === "number" && Number.isFinite(position.coords.accuracy)
+            ? position.coords.accuracy
+            : undefined;
+        const previous = lastGpsLocationRef.current;
+
+        if (
+          accuracy !== undefined &&
+          accuracy > GPS_MAX_ACCURACY_METRES &&
+          previous !== null
+        ) {
+          return;
+        }
+
+        if (
+          previous !== null &&
+          now - lastGpsUpdateRef.current < GPS_MIN_UPDATE_INTERVAL_MS
+        ) {
+          return;
+        }
+
         const gpsHeading =
           typeof position.coords.heading === "number" && Number.isFinite(position.coords.heading)
             ? position.coords.heading
             : undefined;
-        const previous = lastGpsLocationRef.current;
         const movedMetres = previous
           ? getDistanceMetres(
               previous.latitude,
@@ -373,10 +399,29 @@ function App() {
               : derivedHeading !== undefined
                 ? "movement"
                 : previous?.headingSource;
+        const shouldSmooth =
+          previous !== null &&
+          movedMetres > GPS_JITTER_METRES &&
+          movedMetres < 180;
+        const shouldHoldPosition =
+          previous !== null && movedMetres <= Math.max(GPS_JITTER_METRES, (accuracy ?? 0) * 0.25);
+        const latitude = shouldHoldPosition
+          ? previous.latitude
+          : shouldSmooth
+            ? previous.latitude +
+              (position.coords.latitude - previous.latitude) * GPS_POSITION_EASING
+            : position.coords.latitude;
+        const longitude = shouldHoldPosition
+          ? previous.longitude
+          : shouldSmooth
+            ? previous.longitude +
+              (position.coords.longitude - previous.longitude) * GPS_POSITION_EASING
+            : position.coords.longitude;
+
         const nextLocation = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
+          latitude,
+          longitude,
+          accuracy,
           heading,
           headingSource,
           speed:
@@ -387,6 +432,7 @@ function App() {
         };
 
         lastGpsLocationRef.current = nextLocation;
+        lastGpsUpdateRef.current = now;
         setDriveLocation(nextLocation);
       },
       (geoError) => {
@@ -594,6 +640,7 @@ function App() {
     setIsSimulationDriving(false);
     setDriveLocation(null);
     lastGpsLocationRef.current = null;
+    lastGpsUpdateRef.current = 0;
     compassHeadingRef.current = null;
     lastCompassUpdateRef.current = 0;
     setDriveError(null);

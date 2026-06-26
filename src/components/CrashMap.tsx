@@ -83,6 +83,8 @@ declare module "leaflet" {
 const LOW_ZOOM_MAX = 8;
 const MEDIUM_ZOOM_MAX = 12;
 const MAX_RENDERED_OBJECTS = 1000;
+const DRIVE_MAX_RENDERED_OBJECTS = 500;
+const DRIVE_HEAT_POINT_LIMIT = 1800;
 const VIEW_UPDATE_DELAY_MS = 240;
 const DRIVE_FOLLOW_ZOOM = 15;
 const DRIVE_LOOKAHEAD_METRES = 55;
@@ -333,8 +335,11 @@ export function CrashMap({
 
   const heatPoints = useMemo(() => {
     const sourceCrashes = driveMode?.isActive ? crashes : heatmapCrashes ?? crashes;
+    const heatSource = driveMode?.isActive
+      ? sourceCrashes.slice(0, DRIVE_HEAT_POINT_LIMIT)
+      : sourceCrashes;
 
-    return sourceCrashes.map(
+    return heatSource.map(
         (crash) =>
           [crash.latitude, crash.longitude, getHeatWeight(crash)] as [
             number,
@@ -598,7 +603,7 @@ export function CrashMap({
           crash,
           risk: getRiskWeight(crash),
         })),
-      ).slice(0, MAX_RENDERED_OBJECTS);
+      ).slice(0, DRIVE_MAX_RENDERED_OBJECTS);
 
       setAreaCrashCount(crashes.length);
       setRenderItems(visibleDriveCrashes);
