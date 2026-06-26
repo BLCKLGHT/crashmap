@@ -28,6 +28,14 @@ const formatHeading = (heading?: number): string => {
   return `${Math.round(heading)}°`;
 };
 
+const formatHeadingSource = (source?: DriveLocation["headingSource"]): string => {
+  if (source === "compass") return "Compass";
+  if (source === "gps") return "GPS";
+  if (source === "movement") return "Movement";
+  if (source === "simulated") return "Sim";
+  return "Heading";
+};
+
 export function DriveModePanel({
   isActive,
   isSimulation,
@@ -100,7 +108,7 @@ export function DriveModePanel({
               <strong>{risk?.propertyDamageCount ?? 0}</strong>
             </div>
             <div>
-              <span>Heading</span>
+              <span>{formatHeadingSource(location?.headingSource)}</span>
               <strong>{formatHeading(location?.heading)}</strong>
             </div>
           </div>
@@ -110,9 +118,11 @@ export function DriveModePanel({
           </p>
 
           <p className="drive-copy">
-            {typeof location?.heading === "number"
+            {location?.headingSource === "compass"
+              ? "Map is aligned with the phone compass."
+              : typeof location?.heading === "number"
               ? "Map is aligned to your direction of travel."
-              : "Map will align to travel direction when GPS heading is available."}
+              : "Map will align when compass or GPS heading is available."}
           </p>
 
           {isSimulation && (

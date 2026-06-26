@@ -24,8 +24,18 @@ import type {
 } from "./types/crash";
 import { DriveModePanel } from "./components/DriveModePanel";
 
+type DeviceOrientationEventWithCompass = DeviceOrientationEvent & {
+  webkitCompassHeading?: number;
+};
+
+type DeviceOrientationEventConstructorWithPermission = typeof DeviceOrientationEvent & {
+  requestPermission?: () => Promise<"granted" | "denied">;
+};
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const crashTimeCache = new WeakMap<CrashRecord, number | null>();
+const COMPASS_UPDATE_INTERVAL_MS = 120;
+const COMPASS_HEADING_EASING = 0.18;
 
 const getCrashTime = (crash: CrashRecord): number | null => {
   if (crashTimeCache.has(crash)) return crashTimeCache.get(crash) ?? null;
@@ -105,6 +115,16 @@ const getBearingDegrees = (
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 };
 
+const normaliseHeading = (heading: number): number =>
+  ((heading % 360) + 360) % 360;
+
+const getSmoothedHeading = (currentHeading: number | null, nextHeading: number): number => {
+  if (currentHeading === null) return normaliseHeading(nextHeading);
+
+  const delta = ((((nextHeading - currentHeading) % 360) + 540) % 360) - 180;
+  return normaliseHeading(currentHeading + delta * COMPASS_HEADING_EASING);
+};
+
 function App() {
   const [dataState, setDataState] = useState<CrashDataState>({ crashes: [] });
   const [filters, setFilters] = useState<CrashFilters>(defaultFilters);
@@ -124,6 +144,8 @@ function App() {
   const playbackIntervalRef = useRef<number | null>(null);
   const geolocationWatchRef = useRef<number | null>(null);
   const lastGpsLocationRef = useRef<DriveLocation | null>(null);
+  const compassHeadingRef = useRef<number | null>(null);
+  const lastCompassUpdateRef = useRef(0);
 
   const loadCrashData = async ({ refresh = false } = {}) => {
     setError(null);
@@ -313,11 +335,21 @@ function App() {
                 position.coords.longitude,
               )
             : undefined;
+        const heading = compassHeadingRef.current ?? gpsHeading ?? derivedHeading ?? previous?.heading;
+        const headingSource =
+          compassHeadingRef.current !== null
+            ? "compass"
+            : gpsHeading !== undefined
+              ? "gps"
+              : derivedHeading !== undefined
+                ? "movement"
+                : previous?.headingSource;
         const nextLocation = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
-          heading: gpsHeading ?? derivedHeading ?? previous?.heading,
+          heading,
+          headingSource,
           speed:
             typeof position.coords.speed === "number" && Number.isFinite(position.coords.speed)
               ? position.coords.speed
@@ -347,6 +379,54 @@ function App() {
     };
   }, [isDriveModeActive, isSimulationMode]);
 
+  useEffect(() => {
+    if (!isDriveModeActive || isSimulationMode) return;
+
+    const handleOrientation = (event: DeviceOrientationEventWithCompass) => {
+      const rawHeading =
+        typeof event.webkitCompassHeading === "number" && Number.isFinite(event.webkitCompassHeading)
+          ? event.webkitCompassHeading
+          : event.absolute && typeof event.alpha === "number" && Number.isFinite(event.alpha)
+            ? 360 - event.alpha
+            : undefined;
+
+      if (rawHeading === undefined) return;
+
+      const now = window.performance.now();
+      if (now - lastCompassUpdateRef.current < COMPASS_UPDATE_INTERVAL_MS) return;
+      lastCompassUpdateRef.current = now;
+
+      const nextHeading = getSmoothedHeading(compassHeadingRef.current, rawHeading);
+      const previousHeading = compassHeadingRef.current;
+      compassHeadingRef.current = nextHeading;
+
+      if (
+        previousHeading !== null &&
+        Math.abs(((((nextHeading - previousHeading) % 360) + 540) % 360) - 180) < 1.5
+      ) {
+        return;
+      }
+
+      setDriveLocation((currentLocation) =>
+        currentLocation
+          ? {
+              ...currentLocation,
+              heading: nextHeading,
+              headingSource: "compass",
+            }
+          : currentLocation,
+      );
+    };
+
+    window.addEventListener("deviceorientationabsolute", handleOrientation);
+    window.addEventListener("deviceorientation", handleOrientation);
+
+    return () => {
+      window.removeEventListener("deviceorientationabsolute", handleOrientation);
+      window.removeEventListener("deviceorientation", handleOrientation);
+    };
+  }, [isDriveModeActive, isSimulationMode]);
+
   const driveRisk = useMemo(
     () =>
       getDriveRiskSummary(
@@ -357,9 +437,26 @@ function App() {
     [crashSpatialIndex, driveLocation, isDriveModeActive],
   );
 
-  const startDriveMode = () => {
+  const startDriveMode = async () => {
     setDriveError(null);
     setIsSimulationMode(false);
+    compassHeadingRef.current = null;
+    lastCompassUpdateRef.current = 0;
+
+    const DeviceOrientation =
+      window.DeviceOrientationEvent as DeviceOrientationEventConstructorWithPermission | undefined;
+
+    if (DeviceOrientation?.requestPermission) {
+      try {
+        const permission = await DeviceOrientation.requestPermission();
+        if (permission !== "granted") {
+          setDriveError("Compass permission was not granted. Using GPS heading where available.");
+        }
+      } catch {
+        setDriveError("Compass permission is unavailable. Using GPS heading where available.");
+      }
+    }
+
     setIsDriveModeActive(true);
   };
 
@@ -371,6 +468,7 @@ function App() {
       latitude: currentLocation?.latitude ?? -42.8821,
       longitude: currentLocation?.longitude ?? 147.3272,
       heading: currentLocation?.heading ?? 0,
+      headingSource: "simulated",
       speed: 0,
       timestamp: Date.now(),
       isSimulated: true,
@@ -382,6 +480,8 @@ function App() {
     setIsSimulationMode(false);
     setDriveLocation(null);
     lastGpsLocationRef.current = null;
+    compassHeadingRef.current = null;
+    lastCompassUpdateRef.current = 0;
     setDriveError(null);
     if (geolocationWatchRef.current !== null) {
       navigator.geolocation.clearWatch(geolocationWatchRef.current);
@@ -412,6 +512,7 @@ function App() {
             setDriveLocation({
               ...location,
               speed: 0,
+              headingSource: "simulated",
               timestamp: Date.now(),
               isSimulated: true,
             });

@@ -33,6 +33,7 @@ export type DriveLocation = {
   longitude: number;
   accuracy?: number;
   heading?: number;
+  headingSource?: "compass" | "gps" | "movement" | "simulated";
   speed?: number;
   timestamp: number;
   isSimulated?: boolean;

@@ -85,7 +85,6 @@ const MEDIUM_ZOOM_MAX = 12;
 const MAX_RENDERED_OBJECTS = 1000;
 const VIEW_UPDATE_DELAY_MS = 240;
 const DRIVE_FOLLOW_ZOOM = 15;
-const DRIVE_FOLLOW_DURATION_MS = 720;
 const DRIVE_LOOKAHEAD_METRES = 120;
 
 const TASMANIA_BOUNDS = L.latLngBounds(
@@ -270,8 +269,6 @@ const destinationPoint = (
   return L.latLng((lat2 * 180) / Math.PI, (lng2 * 180) / Math.PI);
 };
 
-const easeOutCubic = (progress: number): number => 1 - Math.pow(1 - progress, 3);
-
 export function CrashMap({
   crashes,
   heatmapCrashes,
@@ -290,8 +287,6 @@ export function CrashMap({
   );
   const updateTimerRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const followAnimationRef = useRef<number | null>(null);
-  const followSequenceRef = useRef(0);
   const lastClusterKeyRef = useRef<string>("");
   const driveModeRef = useRef<CrashMapProps["driveMode"]>(driveMode);
   const isSimDraggingRef = useRef(false);
@@ -390,7 +385,7 @@ export function CrashMap({
         currentDriveMode?.isActive && currentHeading !== null ? -currentHeading : 0,
       );
       if (updateTimerRef.current) window.clearTimeout(updateTimerRef.current);
-      setIsUpdating(true);
+      if (!currentDriveMode?.isActive) setIsUpdating(true);
       updateTimerRef.current = window.setTimeout(() => {
         window.requestAnimationFrame(() => {
           setViewState({
@@ -497,7 +492,6 @@ export function CrashMap({
     return () => {
       if (updateTimerRef.current) window.clearTimeout(updateTimerRef.current);
       if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current);
-      if (followAnimationRef.current) window.cancelAnimationFrame(followAnimationRef.current);
       map.off("moveend zoomend resize", updateViewport);
       map.off("click", handleMapClick);
       map.off("mousedown", handleMouseDown);
@@ -660,58 +654,31 @@ export function CrashMap({
           );
     const targetZoom = Math.max(map.getZoom(), DRIVE_FOLLOW_ZOOM);
 
-    if (followAnimationRef.current) {
-      window.cancelAnimationFrame(followAnimationRef.current);
-      followAnimationRef.current = null;
+    map.stop();
+    if (map.getZoom() < DRIVE_FOLLOW_ZOOM) {
+      map.setZoom(DRIVE_FOLLOW_ZOOM, { animate: false });
     }
-
-    const startCenter = map.getCenter();
-    const startZoom = map.getZoom();
-    const startedAt = performance.now();
-    const sequence = followSequenceRef.current + 1;
-    followSequenceRef.current = sequence;
-
-    const step = (timestamp: number) => {
-      if (followSequenceRef.current !== sequence) return;
-
-      const progress = Math.min((timestamp - startedAt) / DRIVE_FOLLOW_DURATION_MS, 1);
-      const eased = easeOutCubic(progress);
-      const nextLat = startCenter.lat + (targetCenter.lat - startCenter.lat) * eased;
-      const nextLng = startCenter.lng + (targetCenter.lng - startCenter.lng) * eased;
-      const nextZoom = startZoom + (targetZoom - startZoom) * eased;
-
-      map.setView([nextLat, nextLng], nextZoom, {
-        animate: false,
-      });
-      applyMapBearing(map, mapBearing);
-
-      if (progress < 1) {
-        followAnimationRef.current = window.requestAnimationFrame(step);
-      } else {
-        followAnimationRef.current = null;
-        setViewState({
-          zoom: map.getZoom(),
-          bounds: map.getBounds().pad(0.12),
-        });
-      }
-    };
-
-    followAnimationRef.current = window.requestAnimationFrame(step);
+    map.panTo(targetCenter, {
+      animate: true,
+      duration: 0.75,
+      easeLinearity: 0.22,
+      noMoveStart: true,
+    });
+    applyMapBearing(map, mapBearing);
+    setViewState({
+      zoom: targetZoom,
+      bounds: map.getBounds().pad(0.12),
+    });
   }, [
     driveMode?.isActive,
-    driveMode?.location?.heading,
     driveMode?.location?.latitude,
     driveMode?.location?.longitude,
-    mapBearing,
   ]);
 
   useEffect(() => {
     if (driveMode?.isActive) return;
-    if (followAnimationRef.current) {
-      window.cancelAnimationFrame(followAnimationRef.current);
-      followAnimationRef.current = null;
-    }
-    followSequenceRef.current += 1;
+    const map = mapRef.current;
+    if (map) map.stop();
   }, [driveMode?.isActive]);
 
   useEffect(() => {
