@@ -34,8 +34,8 @@ type DeviceOrientationEventConstructorWithPermission = typeof DeviceOrientationE
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const crashTimeCache = new WeakMap<CrashRecord, number | null>();
-const COMPASS_UPDATE_INTERVAL_MS = 120;
-const COMPASS_HEADING_EASING = 0.18;
+const COMPASS_UPDATE_INTERVAL_MS = 220;
+const COMPASS_HEADING_EASING = 0.12;
 
 const getCrashTime = (crash: CrashRecord): number | null => {
   if (crashTimeCache.has(crash)) return crashTimeCache.get(crash) ?? null;
@@ -402,7 +402,7 @@ function App() {
 
       if (
         previousHeading !== null &&
-        Math.abs(((((nextHeading - previousHeading) % 360) + 540) % 360) - 180) < 1.5
+        Math.abs(((((nextHeading - previousHeading) % 360) + 540) % 360) - 180) < 3
       ) {
         return;
       }

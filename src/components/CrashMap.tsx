@@ -85,7 +85,9 @@ const MEDIUM_ZOOM_MAX = 12;
 const MAX_RENDERED_OBJECTS = 1000;
 const VIEW_UPDATE_DELAY_MS = 240;
 const DRIVE_FOLLOW_ZOOM = 15;
-const DRIVE_LOOKAHEAD_METRES = 120;
+const DRIVE_LOOKAHEAD_METRES = 55;
+const DRIVE_MOVING_SPEED_MPS = 1.8;
+const DRIVE_PAN_THRESHOLD_METRES = 10;
 
 const TASMANIA_BOUNDS = L.latLngBounds(
   L.latLng(-43.85, 144.35),
@@ -267,6 +269,19 @@ const bearingDegrees = (
     Math.cos(fromLat) * Math.sin(toLat) -
     Math.sin(fromLat) * Math.cos(toLat) * Math.cos(deltaLng);
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+};
+
+const distanceMetres = (from: L.LatLng, to: L.LatLng): number => {
+  const earthRadius = 6371000;
+  const fromLat = (from.lat * Math.PI) / 180;
+  const toLat = (to.lat * Math.PI) / 180;
+  const deltaLat = ((to.lat - from.lat) * Math.PI) / 180;
+  const deltaLng = ((to.lng - from.lng) * Math.PI) / 180;
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(fromLat) * Math.cos(toLat) * Math.sin(deltaLng / 2) ** 2;
+
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
 const destinationPoint = (
@@ -672,10 +687,17 @@ export function CrashMap({
     const map = mapRef.current;
     if (!map || !driveMode?.isActive || !driveMode.location) return;
 
-    const headingForLookahead = getNormalisedHeading(driveMode.location.heading);
+    const userLocation = L.latLng(driveMode.location.latitude, driveMode.location.longitude);
+    const canUseBearingLookahead =
+      driveMode.location.isSimulated ||
+      (driveMode.location.headingSource !== "compass" &&
+        (driveMode.location.speed ?? 0) >= DRIVE_MOVING_SPEED_MPS);
+    const headingForLookahead = canUseBearingLookahead
+      ? getNormalisedHeading(driveMode.location.heading)
+      : null;
     const targetCenter =
       headingForLookahead === null
-        ? L.latLng(driveMode.location.latitude, driveMode.location.longitude)
+        ? userLocation
         : destinationPoint(
             driveMode.location.latitude,
             driveMode.location.longitude,
@@ -683,9 +705,19 @@ export function CrashMap({
             DRIVE_LOOKAHEAD_METRES,
           );
     const targetZoom = Math.max(map.getZoom(), DRIVE_FOLLOW_ZOOM);
+    const centreDistance = distanceMetres(map.getCenter(), targetCenter);
+    const shouldZoom = map.getZoom() < DRIVE_FOLLOW_ZOOM;
+
+    if (!shouldZoom && centreDistance < DRIVE_PAN_THRESHOLD_METRES) {
+      setViewState({
+        zoom: map.getZoom(),
+        bounds: map.getBounds().pad(0.12),
+      });
+      return;
+    }
 
     map.stop();
-    if (map.getZoom() < DRIVE_FOLLOW_ZOOM) {
+    if (shouldZoom) {
       map.setZoom(DRIVE_FOLLOW_ZOOM, { animate: false });
     }
     map.panTo(targetCenter, {
