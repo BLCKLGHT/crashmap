@@ -727,18 +727,23 @@ export function CrashMap({
     }
 
     map.stop();
-    if (shouldZoom) {
-      map.setZoom(DRIVE_FOLLOW_ZOOM, { animate: false });
+    if (driveMode.location.isSimulated) {
+      if (shouldZoom) {
+        map.setZoom(DRIVE_FOLLOW_ZOOM, { animate: false });
+      }
+      map.panTo(targetCenter, {
+        animate: true,
+        duration: 0.75,
+        easeLinearity: 0.22,
+        noMoveStart: true,
+      });
+    } else {
+      map.setView(targetCenter, targetZoom, { animate: false });
+      map.invalidateSize({ animate: false, pan: false });
     }
-    map.panTo(targetCenter, {
-      animate: true,
-      duration: 0.75,
-      easeLinearity: 0.22,
-      noMoveStart: true,
-    });
     applyMapBearing(map, mapBearing);
     setViewState({
-      zoom: targetZoom,
+      zoom: map.getZoom(),
       bounds: map.getBounds().pad(0.12),
     });
   }, [
