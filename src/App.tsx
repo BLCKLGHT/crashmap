@@ -677,9 +677,7 @@ function App() {
     }
   };
 
-  const mapCrashes = isDriveModeActive
-    ? driveRisk?.nearbyCrashes ?? []
-    : filteredCrashes;
+  const mapCrashes = filteredCrashes;
 
   const displayedDriveLocation = useMemo<DriveLocation | null>(() => {
     if (!driveLocation) return null;

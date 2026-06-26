@@ -634,8 +634,11 @@ export function CrashMap({
     if (!viewState) return;
 
     if (driveMode?.isActive) {
+      const visibleCrashes = crashes.filter((crash) =>
+        viewState.bounds.contains(L.latLng(crash.latitude, crash.longitude)),
+      );
       const visibleDriveCrashes = sortByRisk(
-        crashes.map((crash): RenderCrash => ({
+        visibleCrashes.map((crash): RenderCrash => ({
           kind: "crash",
           latitude: crash.latitude,
           longitude: crash.longitude,
@@ -644,7 +647,7 @@ export function CrashMap({
         })),
       ).slice(0, DRIVE_MAX_RENDERED_OBJECTS);
 
-      setAreaCrashCount(crashes.length);
+      setAreaCrashCount(visibleCrashes.length);
       setRenderItems(visibleDriveCrashes);
       setIsUpdating(false);
       return;
