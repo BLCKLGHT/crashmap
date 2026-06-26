@@ -210,6 +210,16 @@ const getMapPane = (map: L.Map): HTMLElement | null => {
 const stripBearingTransform = (transform: string): string =>
   transform.replace(/\srotate\([^)]*\)\sscale\([^)]*\)$/, "");
 
+const getBearingScale = (size: L.Point, bearing: number): number => {
+  const radians = (Math.abs(bearing) * Math.PI) / 180;
+  const sin = Math.abs(Math.sin(radians));
+  const cos = Math.abs(Math.cos(radians));
+  const rotatedWidth = size.x * cos + size.y * sin;
+  const rotatedHeight = size.x * sin + size.y * cos;
+
+  return Math.max(1.18, size.x / rotatedWidth, size.y / rotatedHeight) + 0.12;
+};
+
 const applyMapBearing = (map: L.Map, bearing: number): void => {
   const pane = getMapPane(map);
   if (!pane) return;
@@ -217,14 +227,17 @@ const applyMapBearing = (map: L.Map, bearing: number): void => {
   const baseTransform = stripBearingTransform(pane.style.transform || "");
   const size = map.getSize();
   pane.style.transformOrigin = `${size.x / 2}px ${size.y / 2}px`;
-  pane.style.transition = "transform 320ms ease";
+  pane.style.transition = "transform 420ms ease-out";
 
   if (Math.abs(bearing) < 0.1) {
     pane.style.transform = baseTransform;
     return;
   }
 
-  pane.style.transform = `${baseTransform} rotate(${bearing}deg) scale(1.35)`;
+  pane.style.transform = `${baseTransform} rotate(${bearing}deg) scale(${getBearingScale(
+    size,
+    bearing,
+  ).toFixed(3)})`;
 };
 
 const bearingDegrees = (
@@ -368,6 +381,9 @@ export function CrashMap({
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
+      keepBuffer: 6,
+      updateWhenIdle: false,
+      updateWhenZooming: false,
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
