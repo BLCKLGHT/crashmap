@@ -84,6 +84,9 @@ const LOW_ZOOM_MAX = 8;
 const MEDIUM_ZOOM_MAX = 12;
 const MAX_RENDERED_OBJECTS = 1000;
 const VIEW_UPDATE_DELAY_MS = 240;
+const DRIVE_FOLLOW_ZOOM = 15;
+const DRIVE_FOLLOW_DURATION_MS = 720;
+const DRIVE_LOOKAHEAD_METRES = 120;
 
 const TASMANIA_BOUNDS = L.latLngBounds(
   L.latLng(-43.85, 144.35),
@@ -241,6 +244,34 @@ const bearingDegrees = (
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 };
 
+const destinationPoint = (
+  latitude: number,
+  longitude: number,
+  headingDegrees: number,
+  distanceMetres: number,
+): L.LatLng => {
+  const earthRadius = 6371000;
+  const bearing = (headingDegrees * Math.PI) / 180;
+  const angularDistance = distanceMetres / earthRadius;
+  const lat1 = (latitude * Math.PI) / 180;
+  const lng1 = (longitude * Math.PI) / 180;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angularDistance) +
+      Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing),
+  );
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1),
+      Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2),
+    );
+
+  return L.latLng((lat2 * 180) / Math.PI, (lng2 * 180) / Math.PI);
+};
+
+const easeOutCubic = (progress: number): number => 1 - Math.pow(1 - progress, 3);
+
 export function CrashMap({
   crashes,
   heatmapCrashes,
@@ -259,6 +290,8 @@ export function CrashMap({
   );
   const updateTimerRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const followAnimationRef = useRef<number | null>(null);
+  const followSequenceRef = useRef(0);
   const lastClusterKeyRef = useRef<string>("");
   const driveModeRef = useRef<CrashMapProps["driveMode"]>(driveMode);
   const isSimDraggingRef = useRef(false);
@@ -464,6 +497,7 @@ export function CrashMap({
     return () => {
       if (updateTimerRef.current) window.clearTimeout(updateTimerRef.current);
       if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current);
+      if (followAnimationRef.current) window.cancelAnimationFrame(followAnimationRef.current);
       map.off("moveend zoomend resize", updateViewport);
       map.off("click", handleMapClick);
       map.off("mousedown", handleMouseDown);
@@ -614,15 +648,71 @@ export function CrashMap({
     const map = mapRef.current;
     if (!map || !driveMode?.isActive || !driveMode.location) return;
 
-    const location = L.latLng(driveMode.location.latitude, driveMode.location.longitude);
-    const targetZoom = Math.max(map.getZoom(), 14);
+    const headingForLookahead = getNormalisedHeading(driveMode.location.heading);
+    const targetCenter =
+      headingForLookahead === null
+        ? L.latLng(driveMode.location.latitude, driveMode.location.longitude)
+        : destinationPoint(
+            driveMode.location.latitude,
+            driveMode.location.longitude,
+            headingForLookahead,
+            DRIVE_LOOKAHEAD_METRES,
+          );
+    const targetZoom = Math.max(map.getZoom(), DRIVE_FOLLOW_ZOOM);
 
-    if (map.getZoom() < 14) {
-      map.flyTo(location, targetZoom, { animate: true, duration: 0.45 });
-    } else {
-      map.panTo(location, { animate: true, duration: 0.35 });
+    if (followAnimationRef.current) {
+      window.cancelAnimationFrame(followAnimationRef.current);
+      followAnimationRef.current = null;
     }
-  }, [driveMode?.isActive, driveMode?.location?.latitude, driveMode?.location?.longitude]);
+
+    const startCenter = map.getCenter();
+    const startZoom = map.getZoom();
+    const startedAt = performance.now();
+    const sequence = followSequenceRef.current + 1;
+    followSequenceRef.current = sequence;
+
+    const step = (timestamp: number) => {
+      if (followSequenceRef.current !== sequence) return;
+
+      const progress = Math.min((timestamp - startedAt) / DRIVE_FOLLOW_DURATION_MS, 1);
+      const eased = easeOutCubic(progress);
+      const nextLat = startCenter.lat + (targetCenter.lat - startCenter.lat) * eased;
+      const nextLng = startCenter.lng + (targetCenter.lng - startCenter.lng) * eased;
+      const nextZoom = startZoom + (targetZoom - startZoom) * eased;
+
+      map.setView([nextLat, nextLng], nextZoom, {
+        animate: false,
+      });
+      applyMapBearing(map, mapBearing);
+
+      if (progress < 1) {
+        followAnimationRef.current = window.requestAnimationFrame(step);
+      } else {
+        followAnimationRef.current = null;
+        setViewState({
+          zoom: map.getZoom(),
+          bounds: map.getBounds().pad(0.12),
+        });
+      }
+    };
+
+    followAnimationRef.current = window.requestAnimationFrame(step);
+  }, [
+    driveMode?.isActive,
+    driveMode?.location?.heading,
+    driveMode?.location?.latitude,
+    driveMode?.location?.longitude,
+    mapBearing,
+  ]);
+
+  useEffect(() => {
+    if (driveMode?.isActive) return;
+    if (followAnimationRef.current) {
+      window.cancelAnimationFrame(followAnimationRef.current);
+      followAnimationRef.current = null;
+    }
+    followSequenceRef.current += 1;
+  }, [driveMode?.isActive]);
 
   useEffect(() => {
     const map = mapRef.current;

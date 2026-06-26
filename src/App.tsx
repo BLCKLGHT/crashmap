@@ -70,6 +70,41 @@ const getTimePhase = (time?: number): "day" | "dawn" | "dusk" | "night" => {
   return "day";
 };
 
+const getDistanceMetres = (
+  fromLatitude: number,
+  fromLongitude: number,
+  toLatitude: number,
+  toLongitude: number,
+): number => {
+  const earthRadius = 6371000;
+  const fromLat = (fromLatitude * Math.PI) / 180;
+  const toLat = (toLatitude * Math.PI) / 180;
+  const deltaLat = ((toLatitude - fromLatitude) * Math.PI) / 180;
+  const deltaLng = ((toLongitude - fromLongitude) * Math.PI) / 180;
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(fromLat) * Math.cos(toLat) * Math.sin(deltaLng / 2) ** 2;
+
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const getBearingDegrees = (
+  fromLatitude: number,
+  fromLongitude: number,
+  toLatitude: number,
+  toLongitude: number,
+): number => {
+  const fromLat = (fromLatitude * Math.PI) / 180;
+  const toLat = (toLatitude * Math.PI) / 180;
+  const deltaLng = ((toLongitude - fromLongitude) * Math.PI) / 180;
+  const y = Math.sin(deltaLng) * Math.cos(toLat);
+  const x =
+    Math.cos(fromLat) * Math.sin(toLat) -
+    Math.sin(fromLat) * Math.cos(toLat) * Math.cos(deltaLng);
+
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+};
+
 function App() {
   const [dataState, setDataState] = useState<CrashDataState>({ crashes: [] });
   const [filters, setFilters] = useState<CrashFilters>(defaultFilters);
@@ -88,6 +123,7 @@ function App() {
   const hasStartedInitialLoad = useRef(false);
   const playbackIntervalRef = useRef<number | null>(null);
   const geolocationWatchRef = useRef<number | null>(null);
+  const lastGpsLocationRef = useRef<DriveLocation | null>(null);
 
   const loadCrashData = async ({ refresh = false } = {}) => {
     setError(null);
@@ -255,20 +291,42 @@ function App() {
     setDriveError(null);
     geolocationWatchRef.current = navigator.geolocation.watchPosition(
       (position) => {
-        setDriveLocation({
+        const gpsHeading =
+          typeof position.coords.heading === "number" && Number.isFinite(position.coords.heading)
+            ? position.coords.heading
+            : undefined;
+        const previous = lastGpsLocationRef.current;
+        const movedMetres = previous
+          ? getDistanceMetres(
+              previous.latitude,
+              previous.longitude,
+              position.coords.latitude,
+              position.coords.longitude,
+            )
+          : 0;
+        const derivedHeading =
+          gpsHeading === undefined && previous && movedMetres > 4
+            ? getBearingDegrees(
+                previous.latitude,
+                previous.longitude,
+                position.coords.latitude,
+                position.coords.longitude,
+              )
+            : undefined;
+        const nextLocation = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
-          heading:
-            typeof position.coords.heading === "number" && Number.isFinite(position.coords.heading)
-              ? position.coords.heading
-              : undefined,
+          heading: gpsHeading ?? derivedHeading ?? previous?.heading,
           speed:
             typeof position.coords.speed === "number" && Number.isFinite(position.coords.speed)
               ? position.coords.speed
               : undefined,
           timestamp: position.timestamp,
-        });
+        };
+
+        lastGpsLocationRef.current = nextLocation;
+        setDriveLocation(nextLocation);
       },
       (geoError) => {
         setDriveError(geoError.message || "Location permission was not granted.");
@@ -323,6 +381,7 @@ function App() {
     setIsDriveModeActive(false);
     setIsSimulationMode(false);
     setDriveLocation(null);
+    lastGpsLocationRef.current = null;
     setDriveError(null);
     if (geolocationWatchRef.current !== null) {
       navigator.geolocation.clearWatch(geolocationWatchRef.current);
@@ -334,7 +393,11 @@ function App() {
     isDriveModeActive && driveRisk ? driveRisk.nearbyCrashes : filteredCrashes;
 
   return (
-    <main className={`app ${isChromeHidden ? "app--chrome-hidden" : ""}`}>
+    <main
+      className={`app ${isChromeHidden ? "app--chrome-hidden" : ""} ${
+        isDriveModeActive ? "app--drive-active" : ""
+      }`}
+    >
       <CrashMap
         crashes={mapCrashes}
         heatmapCrashes={filteredCrashes}
