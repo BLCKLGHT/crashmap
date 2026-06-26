@@ -167,6 +167,15 @@ const isWithinTasmaniaGpsBounds = (latitude: number, longitude: number): boolean
   longitude >= TASMANIA_GPS_BOUNDS.minLongitude &&
   longitude <= TASMANIA_GPS_BOUNDS.maxLongitude;
 
+const formatSpeedKmh = (speedMetresPerSecond?: number): string => {
+  if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) {
+    return "--";
+  }
+
+  const speedKmh = Math.max(0, speedMetresPerSecond * 3.6);
+  return speedKmh >= 10 ? speedKmh.toFixed(0) : speedKmh.toFixed(1);
+};
+
 function App() {
   const [dataState, setDataState] = useState<CrashDataState>({ crashes: [] });
   const [filters, setFilters] = useState<CrashFilters>(defaultFilters);
@@ -683,6 +692,8 @@ function App() {
     };
   }, [compassHeading, driveLocation, isSimulationMode]);
 
+  const currentSpeedLabel = formatSpeedKmh(displayedDriveLocation?.speed);
+
   return (
     <main
       className={`app ${isChromeHidden ? "app--chrome-hidden" : ""} ${
@@ -693,6 +704,7 @@ function App() {
         crashes={mapCrashes}
         heatmapCrashes={filteredCrashes}
         timePhase={timePhase}
+        isFullscreen={isChromeHidden}
         driveMode={{
           isActive: isDriveModeActive,
           isSimulation: isSimulationMode,
@@ -765,6 +777,14 @@ function App() {
               minute: "2-digit",
             }).format(new Date(displayTime ?? timeline.playheadTime))}
           </strong>
+        </div>
+      )}
+
+      {isDriveModeActive && (
+        <div className="speed-overlay" aria-live="polite">
+          <span>Speed</span>
+          <strong>{currentSpeedLabel}</strong>
+          <small>km/h</small>
         </div>
       )}
 

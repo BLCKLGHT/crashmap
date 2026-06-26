@@ -10,6 +10,7 @@ type CrashMapProps = {
   crashes: CrashRecord[];
   heatmapCrashes?: CrashRecord[];
   timePhase: "day" | "dawn" | "dusk" | "night";
+  isFullscreen?: boolean;
   driveMode?: {
     isActive: boolean;
     isSimulation: boolean;
@@ -309,6 +310,7 @@ export function CrashMap({
   crashes,
   heatmapCrashes,
   timePhase,
+  isFullscreen = false,
   driveMode,
 }: CrashMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -565,6 +567,43 @@ export function CrashMap({
     if (!map) return;
     applyMapBearing(map, mapBearing);
   }, [mapBearing]);
+
+  useEffect(() => {
+    const updateMapSize = () => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      map.invalidateSize({ animate: false, pan: false });
+      setViewState({
+        zoom: map.getZoom(),
+        bounds: map.getBounds().pad(0.12),
+      });
+    };
+
+    const scheduleResize = () => {
+      window.requestAnimationFrame(updateMapSize);
+      const firstTimer = window.setTimeout(updateMapSize, 120);
+      const secondTimer = window.setTimeout(updateMapSize, 360);
+      return [firstTimer, secondTimer];
+    };
+
+    let timers = scheduleResize();
+    const handleViewportChange = () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      timers = scheduleResize();
+    };
+
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("orientationchange", handleViewportChange);
+    window.visualViewport?.addEventListener("resize", handleViewportChange);
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("orientationchange", handleViewportChange);
+      window.visualViewport?.removeEventListener("resize", handleViewportChange);
+    };
+  }, [isFullscreen]);
 
   useEffect(() => {
     const map = mapRef.current;
