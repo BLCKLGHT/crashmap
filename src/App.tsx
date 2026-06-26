@@ -38,6 +38,7 @@ const COMPASS_UPDATE_INTERVAL_MS = 220;
 const COMPASS_HEADING_EASING = 0.12;
 const GPS_MIN_UPDATE_INTERVAL_MS = 900;
 const GPS_MAX_ACCURACY_METRES = 85;
+const GPS_BOOTSTRAP_MAX_ACCURACY_METRES = 250;
 const GPS_JITTER_METRES = 9;
 const GPS_POSITION_EASING = 0.38;
 const SIMULATION_STEP_MS = 250;
@@ -55,6 +56,13 @@ const SIMULATION_ROUTE: Array<{ latitude: number; longitude: number }> = [
   { latitude: -42.8395, longitude: 147.3308 },
   { latitude: -42.8369, longitude: 147.3445 },
 ];
+
+const TASMANIA_GPS_BOUNDS = {
+  minLatitude: -44.1,
+  maxLatitude: -39.2,
+  minLongitude: 144.0,
+  maxLongitude: 149.1,
+};
 
 const getCrashTime = (crash: CrashRecord): number | null => {
   if (crashTimeCache.has(crash)) return crashTimeCache.get(crash) ?? null;
@@ -152,6 +160,12 @@ const getSmoothedHeading = (currentHeading: number | null, nextHeading: number):
   const delta = ((((nextHeading - currentHeading) % 360) + 540) % 360) - 180;
   return normaliseHeading(currentHeading + delta * COMPASS_HEADING_EASING);
 };
+
+const isWithinTasmaniaGpsBounds = (latitude: number, longitude: number): boolean =>
+  latitude >= TASMANIA_GPS_BOUNDS.minLatitude &&
+  latitude <= TASMANIA_GPS_BOUNDS.maxLatitude &&
+  longitude >= TASMANIA_GPS_BOUNDS.minLongitude &&
+  longitude <= TASMANIA_GPS_BOUNDS.maxLongitude;
 
 function App() {
   const [dataState, setDataState] = useState<CrashDataState>({ crashes: [] });
@@ -356,10 +370,19 @@ function App() {
         const previous = lastGpsLocationRef.current;
 
         if (
-          accuracy !== undefined &&
-          accuracy > GPS_MAX_ACCURACY_METRES &&
-          previous !== null
+          !Number.isFinite(position.coords.latitude) ||
+          !Number.isFinite(position.coords.longitude) ||
+          !isWithinTasmaniaGpsBounds(position.coords.latitude, position.coords.longitude)
         ) {
+          setDriveError("Waiting for a Tasmanian GPS fix before following location.");
+          return;
+        }
+
+        if (
+          accuracy !== undefined &&
+          accuracy > (previous ? GPS_MAX_ACCURACY_METRES : GPS_BOOTSTRAP_MAX_ACCURACY_METRES)
+        ) {
+          setDriveError("Waiting for a more accurate GPS fix before following location.");
           return;
         }
 
@@ -432,6 +455,7 @@ function App() {
 
         lastGpsLocationRef.current = nextLocation;
         lastGpsUpdateRef.current = now;
+        setDriveError(null);
         setDriveLocation(nextLocation);
       },
       (geoError) => {
@@ -644,8 +668,9 @@ function App() {
     }
   };
 
-  const mapCrashes =
-    isDriveModeActive && driveRisk ? driveRisk.nearbyCrashes : filteredCrashes;
+  const mapCrashes = isDriveModeActive
+    ? driveRisk?.nearbyCrashes ?? []
+    : filteredCrashes;
 
   const displayedDriveLocation = useMemo<DriveLocation | null>(() => {
     if (!driveLocation) return null;
