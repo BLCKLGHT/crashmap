@@ -313,6 +313,7 @@ export function CrashMap({
   const mapRef = useRef<L.Map | null>(null);
   const heatRef = useRef<L.Layer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const locationCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const clusterIndexRef = useRef<Supercluster<CrashPointProperties, ClusterProperties> | null>(
     null,
   );
@@ -330,18 +331,18 @@ export function CrashMap({
   const [areaCrashCount, setAreaCrashCount] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const heatPoints = useMemo(
-    () =>
-      (heatmapCrashes ?? crashes).map(
+  const heatPoints = useMemo(() => {
+    const sourceCrashes = driveMode?.isActive ? crashes : heatmapCrashes ?? crashes;
+
+    return sourceCrashes.map(
         (crash) =>
           [crash.latitude, crash.longitude, getHeatWeight(crash)] as [
             number,
             number,
             number,
           ],
-      ),
-    [crashes, heatmapCrashes],
-  );
+      );
+  }, [crashes, driveMode?.isActive, heatmapCrashes]);
 
   const clusterIndex = useMemo(() => {
     const index = new Supercluster<CrashPointProperties, ClusterProperties>({
@@ -414,6 +415,15 @@ export function CrashMap({
     canvas.style.pointerEvents = "none";
     map.getPanes().overlayPane.appendChild(canvas);
     canvasRef.current = canvas;
+
+    const locationPane = map.createPane("driveLocationPane");
+    locationPane.style.zIndex = "650";
+    locationPane.style.pointerEvents = "none";
+    const locationCanvas = L.DomUtil.create("canvas", "drive-location-canvas-layer");
+    locationCanvas.style.position = "absolute";
+    locationCanvas.style.pointerEvents = "none";
+    locationPane.appendChild(locationCanvas);
+    locationCanvasRef.current = locationCanvas;
 
     const updateViewport = () => {
       const currentDriveMode = driveModeRef.current;
@@ -537,9 +547,11 @@ export function CrashMap({
       map.off("mouseup", stopSimDrag);
       map.off("mouseout", stopSimDrag);
       canvas.remove();
+      locationCanvas.remove();
       map.remove();
       mapRef.current = null;
       canvasRef.current = null;
+      locationCanvasRef.current = null;
     };
   }, []);
 
@@ -818,46 +830,71 @@ export function CrashMap({
         nextClickableItems.push({ ...item, x, y, radius });
       }
 
-      if (driveMode?.isActive && driveMode.location) {
-        const point = map.latLngToLayerPoint([
-          driveMode.location.latitude,
-          driveMode.location.longitude,
-        ]);
-        const x = point.x - topLeft.x;
-        const y = point.y - topLeft.y;
-
-        context.save();
-        context.shadowColor = "#38bdf8";
-        context.shadowBlur = 18;
-        context.beginPath();
-        context.arc(x, y, 11, 0, Math.PI * 2);
-        context.fillStyle = "#0284c7";
-        context.fill();
-        context.shadowBlur = 0;
-        context.lineWidth = 3;
-        context.strokeStyle = "#ffffff";
-        context.stroke();
-
-        if (typeof driveMode.location.heading === "number") {
-          const headingRadians = (driveMode.location.heading * Math.PI) / 180;
-          context.translate(x, y);
-          context.rotate(headingRadians);
-          context.beginPath();
-          context.moveTo(0, -24);
-          context.lineTo(7, -6);
-          context.lineTo(0, -10);
-          context.lineTo(-7, -6);
-          context.closePath();
-          context.fillStyle = "#38bdf8";
-          context.fill();
-        }
-
-        context.restore();
-      }
-
       canvasItemsRef.current = nextClickableItems;
     });
-  }, [driveMode, renderItems, timePhase, viewState]);
+  }, [driveMode?.isActive, renderItems, timePhase, viewState]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const canvas = locationCanvasRef.current;
+    if (!map || !canvas) return;
+
+    const size = map.getSize();
+    const pixelRatio = window.devicePixelRatio || 1;
+    const topLeft = map.containerPointToLayerPoint([0, 0]);
+
+    canvas.width = size.x * pixelRatio;
+    canvas.height = size.y * pixelRatio;
+    canvas.style.width = `${size.x}px`;
+    canvas.style.height = `${size.y}px`;
+    L.DomUtil.setPosition(canvas, topLeft);
+
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, size.x, size.y);
+
+    if (!driveMode?.isActive || !driveMode.location) return;
+
+    const point = map.latLngToLayerPoint([
+      driveMode.location.latitude,
+      driveMode.location.longitude,
+    ]);
+    const x = point.x - topLeft.x;
+    const y = point.y - topLeft.y;
+
+    context.save();
+    context.shadowColor = "#38bdf8";
+    context.shadowBlur = 20;
+    context.beginPath();
+    context.arc(x, y, 12, 0, Math.PI * 2);
+    context.fillStyle = "#0284c7";
+    context.fill();
+    context.shadowBlur = 0;
+    context.lineWidth = 3.5;
+    context.strokeStyle = "#ffffff";
+    context.stroke();
+
+    if (typeof driveMode.location.heading === "number") {
+      const headingRadians = (driveMode.location.heading * Math.PI) / 180;
+      context.translate(x, y);
+      context.rotate(headingRadians);
+      context.beginPath();
+      context.moveTo(0, -28);
+      context.lineTo(8, -7);
+      context.lineTo(0, -11);
+      context.lineTo(-8, -7);
+      context.closePath();
+      context.fillStyle = "#38bdf8";
+      context.fill();
+      context.lineWidth = 1.5;
+      context.strokeStyle = "#ffffff";
+      context.stroke();
+    }
+
+    context.restore();
+  }, [driveMode?.isActive, driveMode?.location, viewState]);
 
   useEffect(() => {
     mapRef.current?.invalidateSize();

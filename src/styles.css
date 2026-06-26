@@ -67,8 +67,20 @@ button:disabled {
   display: none !important;
 }
 
+.app.app--chrome-hidden .drive-panel,
+.app.app--chrome-hidden .filter-fab,
+.app.app--chrome-hidden .filter-panel,
+.app.app--chrome-hidden .leaflet-control-container,
+.app.app--chrome-hidden .map-mode,
+.app.app--chrome-hidden .map-updating,
+.app.app--chrome-hidden .sheet-backdrop,
+.app.app--chrome-hidden .timeline-counter {
+  display: none !important;
+}
+
 .app.app--chrome-hidden .fullscreen-toggle {
   right: 12px;
+  display: inline-flex !important;
 }
 
 .app.app--drive-active .top-bar,
@@ -159,6 +171,10 @@ button:disabled {
 
 .crash-canvas-layer {
   z-index: 450;
+}
+
+.drive-location-canvas-layer {
+  z-index: 650;
 }
 
 .fullscreen-toggle {
