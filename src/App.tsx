@@ -1,0 +1,446 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
+import { CrashMap } from "./components/CrashMap";
+import { ErrorState } from "./components/ErrorState";
+import { FilterPanel } from "./components/FilterPanel";
+import { LoadingState } from "./components/LoadingState";
+import {
+  clearCachedCrashData,
+  fetchAllTasCrashData,
+  readCachedCrashData,
+  writeCachedCrashData,
+} from "./data/crashData";
+import { defaultFilters, filterCrashes } from "./data/filterCrashes";
+import {
+  createCrashSpatialIndex,
+  getDriveRiskSummary,
+} from "./data/spatialIndex";
+import type {
+  CrashDataState,
+  CrashFilters,
+  CrashRecord,
+  DriveLocation,
+  TimelineState,
+} from "./types/crash";
+import { DriveModePanel } from "./components/DriveModePanel";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const crashTimeCache = new WeakMap<CrashRecord, number | null>();
+
+const getCrashTime = (crash: CrashRecord): number | null => {
+  if (crashTimeCache.has(crash)) return crashTimeCache.get(crash) ?? null;
+  if (!crash.dateTime) return null;
+
+  const numericValue = Number(crash.dateTime);
+  const time = Number.isFinite(numericValue)
+    ? numericValue
+    : new Date(crash.dateTime).getTime();
+
+  const parsedTime = Number.isFinite(time) ? time : null;
+  crashTimeCache.set(crash, parsedTime);
+  return parsedTime;
+};
+
+const getTimelineDomain = (crashes: CrashRecord[]): { minTime: number; maxTime: number } | null => {
+  let minTime = Number.POSITIVE_INFINITY;
+  let maxTime = Number.NEGATIVE_INFINITY;
+
+  for (const crash of crashes) {
+    const time = getCrashTime(crash);
+    if (time === null) continue;
+    minTime = Math.min(minTime, time);
+    maxTime = Math.max(maxTime, time);
+  }
+
+  if (!Number.isFinite(minTime) || !Number.isFinite(maxTime)) return null;
+
+  return {
+    minTime: Math.floor(minTime / DAY_MS) * DAY_MS,
+    maxTime,
+  };
+};
+
+const getTimePhase = (time?: number): "day" | "dawn" | "dusk" | "night" => {
+  if (!time) return "day";
+
+  const hour = new Date(time).getHours();
+  if (hour < 6 || hour >= 20) return "night";
+  if (hour < 8) return "dawn";
+  if (hour >= 17) return "dusk";
+  return "day";
+};
+
+function App() {
+  const [dataState, setDataState] = useState<CrashDataState>({ crashes: [] });
+  const [filters, setFilters] = useState<CrashFilters>(defaultFilters);
+  const [timeline, setTimeline] = useState<TimelineState | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadedCount, setLoadedCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isTimeOfDayEnabled, setIsTimeOfDayEnabled] = useState(true);
+  const [isChromeHidden, setIsChromeHidden] = useState(false);
+  const [isDriveModeActive, setIsDriveModeActive] = useState(false);
+  const [isSimulationMode, setIsSimulationMode] = useState(false);
+  const [driveLocation, setDriveLocation] = useState<DriveLocation | null>(null);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const hasStartedInitialLoad = useRef(false);
+  const playbackIntervalRef = useRef<number | null>(null);
+  const geolocationWatchRef = useRef<number | null>(null);
+
+  const loadCrashData = async ({ refresh = false } = {}) => {
+    setError(null);
+    if (refresh) setIsRefreshing(true);
+    else setIsLoading(true);
+
+    try {
+      setLoadedCount(0);
+      if (!refresh) {
+        const cached = await readCachedCrashData();
+        if (cached) {
+          setDataState({ crashes: cached.crashes, fetchedAt: cached.fetchedAt });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      if (refresh) await clearCachedCrashData();
+
+      const crashes = await fetchAllTasCrashData(setLoadedCount);
+      const cached = await writeCachedCrashData(crashes);
+      setDataState({ crashes: cached.crashes, fetchedAt: cached.fetchedAt });
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The Tasmanian Government crash data service did not respond.";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (hasStartedInitialLoad.current) return;
+    hasStartedInitialLoad.current = true;
+    void loadCrashData();
+  }, []);
+
+  const timelineDomain = useMemo(
+    () => getTimelineDomain(dataState.crashes),
+    [dataState.crashes],
+  );
+
+  useEffect(() => {
+    if (!timelineDomain) return;
+
+    setTimeline((currentTimeline) => {
+      if (
+        currentTimeline &&
+        currentTimeline.minTime === timelineDomain.minTime &&
+        currentTimeline.maxTime === timelineDomain.maxTime
+      ) {
+        return currentTimeline;
+      }
+
+      return {
+        minTime: timelineDomain.minTime,
+        maxTime: timelineDomain.maxTime,
+        startTime: timelineDomain.minTime,
+        endTime: timelineDomain.maxTime,
+        playheadTime: timelineDomain.maxTime,
+        speed: currentTimeline?.speed ?? 1,
+        isPlaying: false,
+        isPlaybackView: false,
+      };
+    });
+  }, [timelineDomain]);
+
+  useEffect(() => {
+    if (!timeline?.isPlaying) {
+      if (playbackIntervalRef.current) {
+        window.clearInterval(playbackIntervalRef.current);
+        playbackIntervalRef.current = null;
+      }
+      return;
+    }
+
+    playbackIntervalRef.current = window.setInterval(() => {
+      setTimeline((currentTimeline) => {
+        if (!currentTimeline?.isPlaying) return currentTimeline;
+
+        const nextPlayhead = currentTimeline.playheadTime + DAY_MS;
+
+        if (nextPlayhead >= currentTimeline.endTime) {
+          return {
+            ...currentTimeline,
+            playheadTime: currentTimeline.endTime,
+            isPlaying: false,
+            isPlaybackView: true,
+          };
+        }
+
+        return {
+          ...currentTimeline,
+          playheadTime: nextPlayhead,
+          isPlaybackView: true,
+        };
+      });
+    }, Math.max(100, 1000 / timeline.speed));
+
+    return () => {
+      if (playbackIntervalRef.current) {
+        window.clearInterval(playbackIntervalRef.current);
+        playbackIntervalRef.current = null;
+      }
+    };
+  }, [timeline?.isPlaying, timeline?.speed]);
+
+  const attributeFilteredCrashes = useMemo(
+    () => filterCrashes(dataState.crashes, filters),
+    [dataState.crashes, filters],
+  );
+
+  const crashSpatialIndex = useMemo(
+    () => createCrashSpatialIndex(dataState.crashes),
+    [dataState.crashes],
+  );
+
+  const filteredCrashes = useMemo(() => {
+    if (!timeline) return attributeFilteredCrashes;
+
+    const frameStart = Math.floor(timeline.playheadTime / DAY_MS) * DAY_MS;
+    const lowerTime = timeline.isPlaybackView ? frameStart : timeline.startTime;
+    const upperTime = timeline.isPlaybackView
+      ? Math.min(frameStart + DAY_MS, timeline.endTime + 1)
+      : timeline.endTime;
+
+    return attributeFilteredCrashes.filter((crash) => {
+      const time = getCrashTime(crash);
+      return time !== null && time >= lowerTime && time < upperTime;
+    });
+  }, [attributeFilteredCrashes, timeline]);
+
+  const displayTime = useMemo(() => {
+    if (!timeline?.isPlaybackView || !filteredCrashes.length) return timeline?.playheadTime;
+
+    let earliestTime = Number.POSITIVE_INFINITY;
+    for (const crash of filteredCrashes) {
+      const time = getCrashTime(crash);
+      if (time !== null) earliestTime = Math.min(earliestTime, time);
+    }
+
+    return Number.isFinite(earliestTime) ? earliestTime : timeline.playheadTime;
+  }, [filteredCrashes, timeline]);
+
+  const timePhase = isTimeOfDayEnabled ? getTimePhase(displayTime) : "day";
+
+  useEffect(() => {
+    if (!isDriveModeActive || isSimulationMode) {
+      if (geolocationWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(geolocationWatchRef.current);
+        geolocationWatchRef.current = null;
+      }
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setDriveError("Location is not available in this browser.");
+      setIsDriveModeActive(false);
+      return;
+    }
+
+    setDriveError(null);
+    geolocationWatchRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        setDriveLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          heading:
+            typeof position.coords.heading === "number" && Number.isFinite(position.coords.heading)
+              ? position.coords.heading
+              : undefined,
+          speed:
+            typeof position.coords.speed === "number" && Number.isFinite(position.coords.speed)
+              ? position.coords.speed
+              : undefined,
+          timestamp: position.timestamp,
+        });
+      },
+      (geoError) => {
+        setDriveError(geoError.message || "Location permission was not granted.");
+        setIsDriveModeActive(false);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 10000,
+      },
+    );
+
+    return () => {
+      if (geolocationWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(geolocationWatchRef.current);
+        geolocationWatchRef.current = null;
+      }
+    };
+  }, [isDriveModeActive, isSimulationMode]);
+
+  const driveRisk = useMemo(
+    () =>
+      getDriveRiskSummary(
+        crashSpatialIndex,
+        isDriveModeActive ? driveLocation : null,
+        750,
+      ),
+    [crashSpatialIndex, driveLocation, isDriveModeActive],
+  );
+
+  const startDriveMode = () => {
+    setDriveError(null);
+    setIsSimulationMode(false);
+    setIsDriveModeActive(true);
+  };
+
+  const startSimulationMode = () => {
+    setDriveError(null);
+    setIsSimulationMode(true);
+    setIsDriveModeActive(true);
+    setDriveLocation((currentLocation) => ({
+      latitude: currentLocation?.latitude ?? -42.8821,
+      longitude: currentLocation?.longitude ?? 147.3272,
+      heading: currentLocation?.heading ?? 0,
+      speed: 0,
+      timestamp: Date.now(),
+      isSimulated: true,
+    }));
+  };
+
+  const stopDriveMode = () => {
+    setIsDriveModeActive(false);
+    setIsSimulationMode(false);
+    setDriveLocation(null);
+    setDriveError(null);
+    if (geolocationWatchRef.current !== null) {
+      navigator.geolocation.clearWatch(geolocationWatchRef.current);
+      geolocationWatchRef.current = null;
+    }
+  };
+
+  const mapCrashes =
+    isDriveModeActive && driveRisk ? driveRisk.nearbyCrashes : filteredCrashes;
+
+  return (
+    <main className={`app ${isChromeHidden ? "app--chrome-hidden" : ""}`}>
+      <CrashMap
+        crashes={mapCrashes}
+        heatmapCrashes={filteredCrashes}
+        timePhase={timePhase}
+        driveMode={{
+          isActive: isDriveModeActive,
+          isSimulation: isSimulationMode,
+          location: driveLocation,
+          nearbyCrashes: driveRisk?.nearbyCrashes ?? [],
+          onSimulatedLocationChange: (location) => {
+            if (!isSimulationMode) return;
+            setDriveLocation({
+              ...location,
+              speed: 0,
+              timestamp: Date.now(),
+              isSimulated: true,
+            });
+          },
+        }}
+      />
+
+      <header className="top-bar app-chrome">
+        <div>
+          <p className="eyebrow">Public awareness map</p>
+          <h1>Tasmania Crash Map</h1>
+        </div>
+        <p>
+          Historical Tasmanian crash data. Use for awareness and planning, not real-time
+          navigation.
+        </p>
+      </header>
+
+      <FilterPanel
+        crashes={dataState.crashes}
+        filteredCount={filteredCrashes.length}
+        filters={filters}
+        isOpen={isFilterOpen}
+        fetchedAt={dataState.fetchedAt}
+        isRefreshing={isRefreshing}
+        timeline={timeline}
+        isTimeOfDayEnabled={isTimeOfDayEnabled}
+        onChange={setFilters}
+        onTimelineChange={setTimeline}
+        onTimeOfDayToggle={() => setIsTimeOfDayEnabled((enabled) => !enabled)}
+        onRefresh={() => void loadCrashData({ refresh: true })}
+        onOpen={() => setIsFilterOpen(true)}
+        onClose={() => setIsFilterOpen(false)}
+      />
+
+      <DriveModePanel
+        isActive={isDriveModeActive}
+        isSimulation={isSimulationMode}
+        location={driveLocation}
+        risk={driveRisk}
+        error={driveError}
+        onStart={startDriveMode}
+        onStartSimulation={startSimulationMode}
+        onStop={stopDriveMode}
+      />
+
+      {timeline && (
+        <div className={`timeline-counter timeline-counter--${timePhase}`} aria-live="polite">
+          <span>{timeline.isPlaybackView ? "Timeline frame" : "Selected range"}</span>
+          <strong>
+            {new Intl.DateTimeFormat("en-AU", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }).format(new Date(displayTime ?? timeline.playheadTime))}
+          </strong>
+        </div>
+      )}
+
+      <button
+        className="fullscreen-toggle"
+        type="button"
+        onClick={() => {
+          setIsChromeHidden((hidden) => !hidden);
+          setIsFilterOpen(false);
+        }}
+        aria-label={isChromeHidden ? "Show menus" : "Hide menus"}
+      >
+        {isChromeHidden ? (
+          <Minimize2 size={18} aria-hidden="true" />
+        ) : (
+          <Maximize2 size={18} aria-hidden="true" />
+        )}
+        <span>{isChromeHidden ? "Show menus" : "Full screen"}</span>
+      </button>
+
+      {isLoading && (
+        <LoadingState
+          message={
+            loadedCount > 0
+              ? `Loaded ${loadedCount.toLocaleString("en-AU")} records. Caching after download completes.`
+              : "Loading historical crash data. The first download is large and will be cached."
+          }
+        />
+      )}
+      {error && !isLoading && (
+        <ErrorState message={error} onRetry={() => void loadCrashData({ refresh: true })} />
+      )}
+    </main>
+  );
+}
+
+export default App;
