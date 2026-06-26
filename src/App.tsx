@@ -36,6 +36,21 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const crashTimeCache = new WeakMap<CrashRecord, number | null>();
 const COMPASS_UPDATE_INTERVAL_MS = 220;
 const COMPASS_HEADING_EASING = 0.12;
+const SIMULATION_STEP_MS = 250;
+const SIMULATION_SPEED_MPS = 13.9;
+
+const SIMULATION_ROUTE: Array<{ latitude: number; longitude: number }> = [
+  { latitude: -42.8821, longitude: 147.3272 },
+  { latitude: -42.8799, longitude: 147.3236 },
+  { latitude: -42.8744, longitude: 147.3168 },
+  { latitude: -42.8688, longitude: 147.3103 },
+  { latitude: -42.8625, longitude: 147.3049 },
+  { latitude: -42.8557, longitude: 147.3035 },
+  { latitude: -42.8488, longitude: 147.3096 },
+  { latitude: -42.8437, longitude: 147.3178 },
+  { latitude: -42.8395, longitude: 147.3308 },
+  { latitude: -42.8369, longitude: 147.3445 },
+];
 
 const getCrashTime = (crash: CrashRecord): number | null => {
   if (crashTimeCache.has(crash)) return crashTimeCache.get(crash) ?? null;
@@ -115,6 +130,15 @@ const getBearingDegrees = (
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 };
 
+const getInterpolatedPoint = (
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number },
+  progress: number,
+): { latitude: number; longitude: number } => ({
+  latitude: from.latitude + (to.latitude - from.latitude) * progress,
+  longitude: from.longitude + (to.longitude - from.longitude) * progress,
+});
+
 const normaliseHeading = (heading: number): number =>
   ((heading % 360) + 360) % 360;
 
@@ -138,11 +162,16 @@ function App() {
   const [isChromeHidden, setIsChromeHidden] = useState(false);
   const [isDriveModeActive, setIsDriveModeActive] = useState(false);
   const [isSimulationMode, setIsSimulationMode] = useState(false);
+  const [isSimulationDriving, setIsSimulationDriving] = useState(false);
   const [driveLocation, setDriveLocation] = useState<DriveLocation | null>(null);
   const [driveError, setDriveError] = useState<string | null>(null);
   const hasStartedInitialLoad = useRef(false);
   const playbackIntervalRef = useRef<number | null>(null);
   const geolocationWatchRef = useRef<number | null>(null);
+  const simulationIntervalRef = useRef<number | null>(null);
+  const simulationSegmentRef = useRef(0);
+  const simulationSegmentMetresRef = useRef(0);
+  const simulationLastTickRef = useRef(0);
   const lastGpsLocationRef = useRef<DriveLocation | null>(null);
   const compassHeadingRef = useRef<number | null>(null);
   const lastCompassUpdateRef = useRef(0);
@@ -380,6 +409,81 @@ function App() {
   }, [isDriveModeActive, isSimulationMode]);
 
   useEffect(() => {
+    if (!isSimulationMode || !isSimulationDriving) {
+      if (simulationIntervalRef.current !== null) {
+        window.clearInterval(simulationIntervalRef.current);
+        simulationIntervalRef.current = null;
+      }
+      simulationLastTickRef.current = 0;
+      return;
+    }
+
+    simulationLastTickRef.current = Date.now();
+    simulationIntervalRef.current = window.setInterval(() => {
+      const now = Date.now();
+      const elapsedSeconds = Math.max(
+        SIMULATION_STEP_MS / 1000,
+        (now - simulationLastTickRef.current) / 1000,
+      );
+      simulationLastTickRef.current = now;
+
+      let segmentIndex = simulationSegmentRef.current;
+      let segmentMetres = simulationSegmentMetresRef.current + elapsedSeconds * SIMULATION_SPEED_MPS;
+
+      while (segmentIndex < SIMULATION_ROUTE.length - 1) {
+        const from = SIMULATION_ROUTE[segmentIndex];
+        const to = SIMULATION_ROUTE[segmentIndex + 1];
+        const segmentLength = getDistanceMetres(
+          from.latitude,
+          from.longitude,
+          to.latitude,
+          to.longitude,
+        );
+
+        if (segmentMetres <= segmentLength) break;
+
+        segmentMetres -= segmentLength;
+        segmentIndex += 1;
+      }
+
+      if (segmentIndex >= SIMULATION_ROUTE.length - 1) {
+        segmentIndex = 0;
+        segmentMetres = 0;
+      }
+
+      const from = SIMULATION_ROUTE[segmentIndex];
+      const to = SIMULATION_ROUTE[segmentIndex + 1];
+      const segmentLength = getDistanceMetres(
+        from.latitude,
+        from.longitude,
+        to.latitude,
+        to.longitude,
+      );
+      const progress = segmentLength > 0 ? Math.min(segmentMetres / segmentLength, 1) : 0;
+      const point = getInterpolatedPoint(from, to, progress);
+
+      simulationSegmentRef.current = segmentIndex;
+      simulationSegmentMetresRef.current = segmentMetres;
+      setDriveLocation({
+        latitude: point.latitude,
+        longitude: point.longitude,
+        heading: getBearingDegrees(from.latitude, from.longitude, to.latitude, to.longitude),
+        headingSource: "simulated",
+        speed: SIMULATION_SPEED_MPS,
+        timestamp: now,
+        isSimulated: true,
+      });
+    }, SIMULATION_STEP_MS);
+
+    return () => {
+      if (simulationIntervalRef.current !== null) {
+        window.clearInterval(simulationIntervalRef.current);
+        simulationIntervalRef.current = null;
+      }
+    };
+  }, [isSimulationDriving, isSimulationMode]);
+
+  useEffect(() => {
     if (!isDriveModeActive || isSimulationMode) return;
 
     const handleOrientation = (event: DeviceOrientationEventWithCompass) => {
@@ -440,6 +544,7 @@ function App() {
   const startDriveMode = async () => {
     setDriveError(null);
     setIsSimulationMode(false);
+    setIsSimulationDriving(false);
     compassHeadingRef.current = null;
     lastCompassUpdateRef.current = 0;
 
@@ -464,6 +569,9 @@ function App() {
     setDriveError(null);
     setIsSimulationMode(true);
     setIsDriveModeActive(true);
+    setIsSimulationDriving(false);
+    simulationSegmentRef.current = 0;
+    simulationSegmentMetresRef.current = 0;
     setDriveLocation((currentLocation) => ({
       latitude: currentLocation?.latitude ?? -42.8821,
       longitude: currentLocation?.longitude ?? 147.3272,
@@ -475,9 +583,15 @@ function App() {
     }));
   };
 
+  const toggleSimulationDrive = () => {
+    if (!isSimulationMode) return;
+    setIsSimulationDriving((isDriving) => !isDriving);
+  };
+
   const stopDriveMode = () => {
     setIsDriveModeActive(false);
     setIsSimulationMode(false);
+    setIsSimulationDriving(false);
     setDriveLocation(null);
     lastGpsLocationRef.current = null;
     compassHeadingRef.current = null;
@@ -509,6 +623,7 @@ function App() {
           nearbyCrashes: driveRisk?.nearbyCrashes ?? [],
           onSimulatedLocationChange: (location) => {
             if (!isSimulationMode) return;
+            setIsSimulationDriving(false);
             setDriveLocation({
               ...location,
               speed: 0,
@@ -556,6 +671,8 @@ function App() {
         error={driveError}
         onStart={startDriveMode}
         onStartSimulation={startSimulationMode}
+        isSimulationDriving={isSimulationDriving}
+        onToggleSimulationDrive={toggleSimulationDrive}
         onStop={stopDriveMode}
       />
 

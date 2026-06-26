@@ -266,6 +266,26 @@ button:disabled {
   color: #fff;
 }
 
+.simulation-controls {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.sim-drive-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  min-height: 2.25rem;
+  border: 0;
+  border-radius: 8px;
+  background: #0284c7;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 900;
+  padding: 0 0.78rem;
+}
+
 .drive-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -360,6 +380,10 @@ button:disabled {
 
 .app--drive-active .drive-copy + .drive-copy {
   display: none;
+}
+
+.app--drive-active .simulation-controls .drive-copy {
+  display: block;
 }
 
 .drive-error {
@@ -1177,6 +1201,11 @@ input[type="range"] {
   .app--drive-active .stop-drive-button {
     min-height: 2rem;
     padding: 0 0.58rem;
+  }
+
+  .app--drive-active .sim-drive-button {
+    min-height: 2rem;
+    font-size: 0.74rem;
   }
 
   .app--drive-active .drive-stats {

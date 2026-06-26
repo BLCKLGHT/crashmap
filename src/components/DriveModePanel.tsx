@@ -1,4 +1,4 @@
-import { CarFront, FlaskConical, OctagonAlert, Square } from "lucide-react";
+import { CarFront, FlaskConical, OctagonAlert, Pause, Play, Square } from "lucide-react";
 import type { DriveLocation, DriveRiskSummary } from "../types/crash";
 
 type DriveModePanelProps = {
@@ -7,8 +7,10 @@ type DriveModePanelProps = {
   location: DriveLocation | null;
   risk: DriveRiskSummary | null;
   error: string | null;
+  isSimulationDriving: boolean;
   onStart: () => void;
   onStartSimulation: () => void;
+  onToggleSimulationDrive: () => void;
   onStop: () => void;
 };
 
@@ -42,8 +44,10 @@ export function DriveModePanel({
   location,
   risk,
   error,
+  isSimulationDriving,
   onStart,
   onStartSimulation,
+  onToggleSimulationDrive,
   onStop,
 }: DriveModePanelProps) {
   return (
@@ -126,9 +130,23 @@ export function DriveModePanel({
           </p>
 
           {isSimulation && (
-            <p className="drive-copy">
-              Click or drag on the map to move the simulated location.
-            </p>
+            <div className="simulation-controls">
+              <button
+                className="sim-drive-button"
+                type="button"
+                onClick={onToggleSimulationDrive}
+              >
+                {isSimulationDriving ? (
+                  <Pause size={16} aria-hidden="true" />
+                ) : (
+                  <Play size={16} aria-hidden="true" />
+                )}
+                <span>{isSimulationDriving ? "Pause drive" : "Auto drive"}</span>
+              </button>
+              <p className="drive-copy">
+                Auto drive follows a test route. Click or drag the map to take manual control.
+              </p>
+            </div>
           )}
         </>
       )}
