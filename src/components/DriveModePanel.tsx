@@ -119,9 +119,9 @@ export function DriveModePanel({
 
           <p className="drive-copy">
             {location?.headingSource === "compass"
-              ? "Map is aligned with the phone compass."
+              ? "Phone compass is active for the direction marker."
               : typeof location?.heading === "number"
-              ? "Map is aligned to your direction of travel."
+              ? "Direction marker is aligned to your travel bearing."
               : "Map will align when compass or GPS heading is available."}
           </p>
 

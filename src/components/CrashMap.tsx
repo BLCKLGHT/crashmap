@@ -202,6 +202,19 @@ const getNormalisedHeading = (heading?: number): number | null => {
   return ((heading % 360) + 360) % 360;
 };
 
+const canRotateLeafletPane = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+
+  const userAgent = navigator.userAgent;
+  const isIos =
+    /iPad|iPhone|iPod/.test(userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  // iOS Chrome/Firefox/Edge still use WebKit, and rotating Leaflet's tile pane
+  // exposes unloaded tile areas on real devices. Keep the map north-up there.
+  return !isIos;
+};
+
 const getMapPane = (map: L.Map): HTMLElement | null => {
   const mapWithPane = map as L.Map & { _mapPane?: HTMLElement };
   return mapWithPane._mapPane ?? null;
@@ -354,7 +367,8 @@ export function CrashMap({
 
   const mode = viewState ? getRenderMode(viewState.zoom) : "heatmap";
   const heading = getNormalisedHeading(driveMode?.location?.heading);
-  const isHeadingUp = Boolean(driveMode?.isActive && heading !== null);
+  const shouldRotateMap = useMemo(() => canRotateLeafletPane(), []);
+  const isHeadingUp = Boolean(driveMode?.isActive && heading !== null && shouldRotateMap);
   const mapBearing = isHeadingUp ? -(heading ?? 0) : 0;
 
   const statusText = useMemo(() => {
