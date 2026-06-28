@@ -336,6 +336,7 @@ export function CrashMap({
   );
   const updateTimerRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const fatalPulseFrameRef = useRef<number | null>(null);
   const lastClusterKeyRef = useRef<string>("");
   const driveModeRef = useRef<CrashMapProps["driveMode"]>(driveMode);
   const isSimDraggingRef = useRef(false);
@@ -431,6 +432,9 @@ export function CrashMap({
       context.font = "800 12px Inter, system-ui, sans-serif";
       context.textAlign = "center";
       context.textBaseline = "middle";
+      const fatalPulse = driveMode?.isActive
+        ? (Math.sin(window.performance.now() / 230) + 1) / 2
+        : 0;
 
       const nextClickableItems: Array<RenderItem & { x: number; y: number; radius: number }> =
         [];
@@ -503,7 +507,7 @@ export function CrashMap({
         const isSerious = severity === "serious";
         const radius = driveMode?.isActive
           ? isFatal
-            ? 13
+            ? 14 + fatalPulse * 1.2
             : isSerious
               ? 10
               : 4.75
@@ -526,17 +530,33 @@ export function CrashMap({
 
         if (driveMode?.isActive && (isFatal || isSerious)) {
           context.shadowColor = color;
-          context.shadowBlur = isFatal ? 24 : 14;
+          context.shadowBlur = isFatal ? 28 + fatalPulse * 16 : 14;
           context.beginPath();
-          context.arc(x, y, radius + (isFatal ? 8 : 6), 0, Math.PI * 2);
-          context.fillStyle = isFatal ? "rgba(220, 38, 38, 0.24)" : "rgba(217, 119, 6, 0.22)";
+          context.arc(
+            x,
+            y,
+            radius + (isFatal ? 10 + fatalPulse * 8 : 6),
+            0,
+            Math.PI * 2,
+          );
+          context.fillStyle = isFatal
+            ? `rgba(220, 38, 38, ${0.22 + fatalPulse * 0.2})`
+            : "rgba(217, 119, 6, 0.22)";
           context.fill();
           context.shadowBlur = 0;
 
           context.beginPath();
-          context.arc(x, y, radius + (isFatal ? 4 : 3), 0, Math.PI * 2);
-          context.lineWidth = isFatal ? 3 : 2.5;
-          context.strokeStyle = isFatal ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.9)";
+          context.arc(
+            x,
+            y,
+            radius + (isFatal ? 5 + fatalPulse * 5 : 3),
+            0,
+            Math.PI * 2,
+          );
+          context.lineWidth = isFatal ? 3.4 : 2.5;
+          context.strokeStyle = isFatal
+            ? `rgba(255, 255, 255, ${0.82 + fatalPulse * 0.18})`
+            : "rgba(255, 255, 255, 0.9)";
           context.stroke();
         }
 
@@ -558,7 +578,12 @@ export function CrashMap({
           context.fill();
         }
 
-        nextClickableItems.push({ ...item, x, y, radius: radius + (isFatal ? 10 : isSerious ? 7 : 2) });
+        nextClickableItems.push({
+          ...item,
+          x,
+          y,
+          radius: radius + (isFatal ? 16 : isSerious ? 7 : 2),
+        });
       }
 
       canvasItemsRef.current = nextClickableItems;
@@ -779,6 +804,7 @@ export function CrashMap({
     return () => {
       if (updateTimerRef.current) window.clearTimeout(updateTimerRef.current);
       if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current);
+      if (fatalPulseFrameRef.current) window.cancelAnimationFrame(fatalPulseFrameRef.current);
       map.off("moveend zoomend resize", updateViewport);
       map.off("click", handleMapClick);
       map.off("mousedown", handleMouseDown);
@@ -1047,6 +1073,29 @@ export function CrashMap({
   useEffect(() => {
     drawCrashCanvas();
   }, [drawCrashCanvas]);
+
+  useEffect(() => {
+    if (!driveMode?.isActive || !renderItems.some((item) => item.kind === "crash" && isFatalCrash(item.crash))) {
+      if (fatalPulseFrameRef.current) {
+        window.cancelAnimationFrame(fatalPulseFrameRef.current);
+        fatalPulseFrameRef.current = null;
+      }
+      return;
+    }
+
+    const pulseFatalDots = () => {
+      drawCrashCanvas();
+      fatalPulseFrameRef.current = window.requestAnimationFrame(pulseFatalDots);
+    };
+
+    fatalPulseFrameRef.current = window.requestAnimationFrame(pulseFatalDots);
+    return () => {
+      if (fatalPulseFrameRef.current) {
+        window.cancelAnimationFrame(fatalPulseFrameRef.current);
+        fatalPulseFrameRef.current = null;
+      }
+    };
+  }, [drawCrashCanvas, driveMode?.isActive, renderItems]);
 
   useEffect(() => {
     drawLocationCanvas();

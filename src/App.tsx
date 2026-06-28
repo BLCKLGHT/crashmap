@@ -183,7 +183,7 @@ const getFatalProximityIntensity = (closestFatalMetres?: number): number => {
   }
 
   if (closestFatalMetres > 500) return 0;
-  return Math.max(0.18, Math.min(1, 1 - closestFatalMetres / 500));
+  return Math.max(0.35, Math.min(1, 1 - closestFatalMetres / 500));
 };
 
 function App() {

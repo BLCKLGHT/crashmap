@@ -245,11 +245,30 @@ button:disabled {
   z-index: 610;
   pointer-events: none;
   opacity: var(--fatal-glow-strength, 0);
+  background: radial-gradient(
+    circle at center,
+    rgba(220, 38, 38, 0) 42%,
+    rgba(220, 38, 38, 0.1) 74%,
+    rgba(220, 38, 38, 0.22) 100%
+  );
   box-shadow:
-    inset 0 0 34px rgba(220, 38, 38, 0.34),
-    inset 0 0 86px rgba(220, 38, 38, 0.24),
-    inset 0 0 150px rgba(220, 38, 38, 0.18);
-  transition: opacity 240ms ease;
+    inset 0 0 46px rgba(220, 38, 38, 0.72),
+    inset 0 0 112px rgba(220, 38, 38, 0.52),
+    inset 0 0 210px rgba(220, 38, 38, 0.34),
+    inset 0 0 320px rgba(220, 38, 38, 0.22);
+  animation: fatal-proximity-pulse 1.7s ease-in-out infinite;
+  transition: opacity 180ms ease;
+}
+
+@keyframes fatal-proximity-pulse {
+  0%,
+  100% {
+    filter: saturate(1);
+  }
+
+  50% {
+    filter: saturate(1.22);
+  }
 }
 
 .drive-panel {
