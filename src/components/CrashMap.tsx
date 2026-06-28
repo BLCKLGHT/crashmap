@@ -85,7 +85,8 @@ const LOW_ZOOM_MAX = 8;
 const MEDIUM_ZOOM_MAX = 12;
 const MAX_RENDERED_OBJECTS = 1000;
 const DRIVE_MAX_RENDERED_OBJECTS = 500;
-const DRIVE_CLOUD_POINT_LIMIT = 1000;
+const DRIVE_CLOUD_POINT_LIMIT = 520;
+const DRIVE_RENDER_REFRESH_MS = 1200;
 const VIEW_UPDATE_DELAY_MS = 240;
 const DRIVE_FOLLOW_ZOOM = 15;
 const DRIVE_LOOKAHEAD_METRES = 55;
@@ -327,6 +328,7 @@ export function CrashMap({
   const mapRef = useRef<L.Map | null>(null);
   const heatRef = useRef<L.Layer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fatalPulseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const locationCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const clusterIndexRef = useRef<Supercluster<CrashPointProperties, ClusterProperties> | null>(
     null,
@@ -336,7 +338,8 @@ export function CrashMap({
   );
   const updateTimerRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const fatalPulseFrameRef = useRef<number | null>(null);
+  const pulseAnimationFrameRef = useRef<number | null>(null);
+  const lastDriveRenderUpdateRef = useRef(0);
   const lastClusterKeyRef = useRef<string>("");
   const driveModeRef = useRef<CrashMapProps["driveMode"]>(driveMode);
   const isSimDraggingRef = useRef(false);
@@ -406,6 +409,26 @@ export function CrashMap({
     return `Showing ${areaCrashCount.toLocaleString("en-AU")} crashes in this area`;
   }, [areaCrashCount, isUpdating, mode, viewState]);
 
+  const nearestFatalCrash = useMemo<RenderCrash | null>(() => {
+    if (!driveMode?.isActive || !driveMode.location) return null;
+
+    const userLocation = L.latLng(driveMode.location.latitude, driveMode.location.longitude);
+    let nearest: RenderCrash | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const item of renderItems) {
+      if (item.kind !== "crash" || !isFatalCrash(item.crash)) continue;
+
+      const distance = distanceMetres(userLocation, L.latLng(item.latitude, item.longitude));
+      if (distance < nearestDistance) {
+        nearest = item;
+        nearestDistance = distance;
+      }
+    }
+
+    return nearest;
+  }, [driveMode?.isActive, driveMode?.location, renderItems]);
+
   const drawCrashCanvas = useCallback(() => {
     const map = mapRef.current;
     const canvas = canvasRef.current;
@@ -432,9 +455,6 @@ export function CrashMap({
       context.font = "800 12px Inter, system-ui, sans-serif";
       context.textAlign = "center";
       context.textBaseline = "middle";
-      const fatalPulse = driveMode?.isActive
-        ? (Math.sin(window.performance.now() / 230) + 1) / 2
-        : 0;
 
       const nextClickableItems: Array<RenderItem & { x: number; y: number; radius: number }> =
         [];
@@ -507,7 +527,7 @@ export function CrashMap({
         const isSerious = severity === "serious";
         const radius = driveMode?.isActive
           ? isFatal
-            ? 14 + fatalPulse * 1.2
+            ? 14
             : isSerious
               ? 10
               : 4.75
@@ -530,17 +550,17 @@ export function CrashMap({
 
         if (driveMode?.isActive && (isFatal || isSerious)) {
           context.shadowColor = color;
-          context.shadowBlur = isFatal ? 28 + fatalPulse * 16 : 14;
+          context.shadowBlur = isFatal ? 28 : 14;
           context.beginPath();
           context.arc(
             x,
             y,
-            radius + (isFatal ? 10 + fatalPulse * 8 : 6),
+            radius + (isFatal ? 10 : 6),
             0,
             Math.PI * 2,
           );
           context.fillStyle = isFatal
-            ? `rgba(220, 38, 38, ${0.22 + fatalPulse * 0.2})`
+            ? "rgba(220, 38, 38, 0.24)"
             : "rgba(217, 119, 6, 0.22)";
           context.fill();
           context.shadowBlur = 0;
@@ -549,13 +569,13 @@ export function CrashMap({
           context.arc(
             x,
             y,
-            radius + (isFatal ? 5 + fatalPulse * 5 : 3),
+            radius + (isFatal ? 5 : 3),
             0,
             Math.PI * 2,
           );
           context.lineWidth = isFatal ? 3.4 : 2.5;
           context.strokeStyle = isFatal
-            ? `rgba(255, 255, 255, ${0.82 + fatalPulse * 0.18})`
+            ? "rgba(255, 255, 255, 0.95)"
             : "rgba(255, 255, 255, 0.9)";
           context.stroke();
         }
@@ -652,6 +672,51 @@ export function CrashMap({
     context.restore();
   }, [driveMode?.isActive, driveMode?.location]);
 
+  const drawFatalPulseCanvas = useCallback((pulse = 0) => {
+    const map = mapRef.current;
+    const canvas = fatalPulseCanvasRef.current;
+    if (!map || !canvas) return;
+
+    const size = map.getSize();
+    const pixelRatio = window.devicePixelRatio || 1;
+    const topLeft = map.containerPointToLayerPoint([0, 0]);
+
+    canvas.width = size.x * pixelRatio;
+    canvas.height = size.y * pixelRatio;
+    canvas.style.width = `${size.x}px`;
+    canvas.style.height = `${size.y}px`;
+    L.DomUtil.setPosition(canvas, topLeft);
+
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, size.x, size.y);
+
+    if (!driveMode?.isActive || !nearestFatalCrash) return;
+
+    const layerPoint = map.latLngToLayerPoint([
+      nearestFatalCrash.latitude,
+      nearestFatalCrash.longitude,
+    ]);
+    const x = layerPoint.x - topLeft.x;
+    const y = layerPoint.y - topLeft.y;
+    const radius = 20 + pulse * 12;
+
+    context.save();
+    context.shadowColor = "#dc2626";
+    context.shadowBlur = 28 + pulse * 22;
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fillStyle = `rgba(220, 38, 38, ${0.16 + pulse * 0.18})`;
+    context.fill();
+    context.shadowBlur = 0;
+    context.lineWidth = 3.2;
+    context.strokeStyle = `rgba(255, 255, 255, ${0.82 + pulse * 0.18})`;
+    context.stroke();
+    context.restore();
+  }, [driveMode?.isActive, nearestFatalCrash]);
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
@@ -679,6 +744,12 @@ export function CrashMap({
     canvas.style.pointerEvents = "none";
     map.getPanes().overlayPane.appendChild(canvas);
     canvasRef.current = canvas;
+
+    const fatalPulseCanvas = L.DomUtil.create("canvas", "fatal-pulse-canvas-layer");
+    fatalPulseCanvas.style.position = "absolute";
+    fatalPulseCanvas.style.pointerEvents = "none";
+    map.getPanes().overlayPane.appendChild(fatalPulseCanvas);
+    fatalPulseCanvasRef.current = fatalPulseCanvas;
 
     const locationPane = map.createPane("driveLocationPane");
     locationPane.style.zIndex = "650";
@@ -804,7 +875,7 @@ export function CrashMap({
     return () => {
       if (updateTimerRef.current) window.clearTimeout(updateTimerRef.current);
       if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current);
-      if (fatalPulseFrameRef.current) window.cancelAnimationFrame(fatalPulseFrameRef.current);
+      if (pulseAnimationFrameRef.current) window.cancelAnimationFrame(pulseAnimationFrameRef.current);
       map.off("moveend zoomend resize", updateViewport);
       map.off("click", handleMapClick);
       map.off("mousedown", handleMouseDown);
@@ -812,10 +883,12 @@ export function CrashMap({
       map.off("mouseup", stopSimDrag);
       map.off("mouseout", stopSimDrag);
       canvas.remove();
+      fatalPulseCanvas.remove();
       locationCanvas.remove();
       map.remove();
       mapRef.current = null;
       canvasRef.current = null;
+      fatalPulseCanvasRef.current = null;
       locationCanvasRef.current = null;
     };
   }, []);
@@ -892,6 +965,16 @@ export function CrashMap({
     if (!viewState) return;
 
     if (driveMode?.isActive) {
+      const now = window.performance.now();
+      if (
+        now - lastDriveRenderUpdateRef.current < DRIVE_RENDER_REFRESH_MS &&
+        (renderItems.length > 0 || driveCloudItems.length > 0)
+      ) {
+        setIsUpdating(false);
+        return;
+      }
+
+      lastDriveRenderUpdateRef.current = now;
       const visibleCrashes = crashes.filter((crash) =>
         viewState.bounds.contains(L.latLng(crash.latitude, crash.longitude)),
       );
@@ -921,6 +1004,7 @@ export function CrashMap({
       return;
     }
 
+    lastDriveRenderUpdateRef.current = 0;
     setDriveCloudItems([]);
 
     if (mode === "heatmap") {
@@ -1075,27 +1159,29 @@ export function CrashMap({
   }, [drawCrashCanvas]);
 
   useEffect(() => {
-    if (!driveMode?.isActive || !renderItems.some((item) => item.kind === "crash" && isFatalCrash(item.crash))) {
-      if (fatalPulseFrameRef.current) {
-        window.cancelAnimationFrame(fatalPulseFrameRef.current);
-        fatalPulseFrameRef.current = null;
+    if (!driveMode?.isActive || !nearestFatalCrash) {
+      if (pulseAnimationFrameRef.current) {
+        window.cancelAnimationFrame(pulseAnimationFrameRef.current);
+        pulseAnimationFrameRef.current = null;
       }
+      drawFatalPulseCanvas(0);
       return;
     }
 
-    const pulseFatalDots = () => {
-      drawCrashCanvas();
-      fatalPulseFrameRef.current = window.requestAnimationFrame(pulseFatalDots);
+    const pulseNearestFatal = () => {
+      const pulse = (Math.sin(window.performance.now() / 230) + 1) / 2;
+      drawFatalPulseCanvas(pulse);
+      pulseAnimationFrameRef.current = window.requestAnimationFrame(pulseNearestFatal);
     };
 
-    fatalPulseFrameRef.current = window.requestAnimationFrame(pulseFatalDots);
+    pulseAnimationFrameRef.current = window.requestAnimationFrame(pulseNearestFatal);
     return () => {
-      if (fatalPulseFrameRef.current) {
-        window.cancelAnimationFrame(fatalPulseFrameRef.current);
-        fatalPulseFrameRef.current = null;
+      if (pulseAnimationFrameRef.current) {
+        window.cancelAnimationFrame(pulseAnimationFrameRef.current);
+        pulseAnimationFrameRef.current = null;
       }
     };
-  }, [drawCrashCanvas, driveMode?.isActive, renderItems]);
+  }, [drawFatalPulseCanvas, driveMode?.isActive, nearestFatalCrash]);
 
   useEffect(() => {
     drawLocationCanvas();
@@ -1107,6 +1193,7 @@ export function CrashMap({
 
     const redrawCanvases = () => {
       drawCrashCanvas();
+      drawFatalPulseCanvas(0);
       drawLocationCanvas();
     };
 
@@ -1114,7 +1201,7 @@ export function CrashMap({
     return () => {
       map.off("move zoom", redrawCanvases);
     };
-  }, [drawCrashCanvas, drawLocationCanvas]);
+  }, [drawCrashCanvas, drawFatalPulseCanvas, drawLocationCanvas]);
 
   useEffect(() => {
     mapRef.current?.invalidateSize();
