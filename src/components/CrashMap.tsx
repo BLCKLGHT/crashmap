@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Feature, Point } from "geojson";
 import L from "leaflet";
 import "leaflet.heat";
@@ -337,9 +337,29 @@ export function CrashMap({
 
   const heatPoints = useMemo(() => {
     const sourceCrashes = driveMode?.isActive ? crashes : heatmapCrashes ?? crashes;
-    const heatSource = driveMode?.isActive
-      ? sourceCrashes.slice(0, DRIVE_HEAT_POINT_LIMIT)
-      : sourceCrashes;
+    const heatSource = driveMode?.isActive && viewState
+      ? sortByRisk(
+          sourceCrashes
+            .filter((crash) =>
+              viewState.bounds.contains(L.latLng(crash.latitude, crash.longitude)),
+            )
+            .map((crash) => ({
+              crash,
+              risk: getRiskWeight(crash),
+            })),
+        )
+          .slice(0, DRIVE_HEAT_POINT_LIMIT)
+          .map((item) => item.crash)
+      : driveMode?.isActive
+        ? sortByRisk(
+            sourceCrashes.map((crash) => ({
+              crash,
+              risk: getRiskWeight(crash),
+            })),
+          )
+            .slice(0, DRIVE_HEAT_POINT_LIMIT)
+            .map((item) => item.crash)
+        : sourceCrashes;
 
     return heatSource.map(
         (crash) =>
@@ -349,7 +369,7 @@ export function CrashMap({
             number,
           ],
       );
-  }, [crashes, driveMode?.isActive, heatmapCrashes]);
+  }, [crashes, driveMode?.isActive, heatmapCrashes, viewState]);
 
   const clusterIndex = useMemo(() => {
     const index = new Supercluster<CrashPointProperties, ClusterProperties>({
@@ -394,6 +414,202 @@ export function CrashMap({
 
     return `Showing ${areaCrashCount.toLocaleString("en-AU")} crashes in this area`;
   }, [areaCrashCount, isUpdating, mode, viewState]);
+
+  const drawCrashCanvas = useCallback(() => {
+    const map = mapRef.current;
+    const canvas = canvasRef.current;
+    if (!map || !canvas) return;
+
+    if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current);
+
+    animationFrameRef.current = window.requestAnimationFrame(() => {
+      const size = map.getSize();
+      const pixelRatio = window.devicePixelRatio || 1;
+      const topLeft = map.containerPointToLayerPoint([0, 0]);
+
+      canvas.width = size.x * pixelRatio;
+      canvas.height = size.y * pixelRatio;
+      canvas.style.width = `${size.x}px`;
+      canvas.style.height = `${size.y}px`;
+      L.DomUtil.setPosition(canvas, topLeft);
+
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      context.clearRect(0, 0, size.x, size.y);
+      context.font = "800 12px Inter, system-ui, sans-serif";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+
+      const nextClickableItems: Array<RenderItem & { x: number; y: number; radius: number }> =
+        [];
+
+      for (const item of renderItems) {
+        const layerPoint = map.latLngToLayerPoint([item.latitude, item.longitude]);
+        const x = layerPoint.x - topLeft.x;
+        const y = layerPoint.y - topLeft.y;
+
+        if (item.kind === "cluster") {
+          const riskPerCrash = item.risk / Math.max(item.count, 1);
+          const radius = Math.max(16, Math.min(34, 12 + Math.log2(item.count + 1) * 3.2));
+          const color = getRiskColor(riskPerCrash);
+          const shouldGlow = timePhase === "night" || timePhase === "dusk";
+
+          context.shadowColor = shouldGlow ? color : "transparent";
+          context.shadowBlur = shouldGlow ? 18 : 0;
+
+          context.beginPath();
+          context.arc(x, y, radius + 4, 0, Math.PI * 2);
+          context.fillStyle = `${color}33`;
+          context.fill();
+          context.beginPath();
+          context.arc(x, y, radius, 0, Math.PI * 2);
+          context.fillStyle = color;
+          context.fill();
+          context.lineWidth = 2;
+          context.strokeStyle = "#ffffff";
+          context.stroke();
+          context.shadowBlur = 0;
+          context.fillStyle = "#ffffff";
+          context.fillText(
+            item.count > 999 ? `${Math.round(item.count / 100) / 10}k` : String(item.count),
+            x,
+            y,
+          );
+
+          nextClickableItems.push({ ...item, x, y, radius });
+          continue;
+        }
+
+        const severity = getSeverityClass(item.crash);
+        const isFatal = severity === "fatal";
+        const isSerious = severity === "serious";
+        const radius = driveMode?.isActive
+          ? isFatal
+            ? 13
+            : isSerious
+              ? 10
+              : 4.75
+          : item.risk >= 8
+            ? 7
+            : item.risk >= 4
+              ? 6
+              : 4.5;
+        const color = getCrashColor(item.crash);
+        const shouldGlow = timePhase === "night" || timePhase === "dusk" || driveMode?.isActive;
+        const glowBlur = driveMode?.isActive
+          ? isFatal
+            ? 28
+            : isSerious
+              ? 18
+              : 8
+          : shouldGlow
+            ? 14
+            : 0;
+
+        if (driveMode?.isActive && (isFatal || isSerious)) {
+          context.shadowColor = color;
+          context.shadowBlur = isFatal ? 24 : 14;
+          context.beginPath();
+          context.arc(x, y, radius + (isFatal ? 8 : 6), 0, Math.PI * 2);
+          context.fillStyle = isFatal ? "rgba(220, 38, 38, 0.24)" : "rgba(217, 119, 6, 0.22)";
+          context.fill();
+          context.shadowBlur = 0;
+
+          context.beginPath();
+          context.arc(x, y, radius + (isFatal ? 4 : 3), 0, Math.PI * 2);
+          context.lineWidth = isFatal ? 3 : 2.5;
+          context.strokeStyle = isFatal ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.9)";
+          context.stroke();
+        }
+
+        context.shadowColor = shouldGlow ? color : "transparent";
+        context.shadowBlur = glowBlur;
+        context.beginPath();
+        context.arc(x, y, radius, 0, Math.PI * 2);
+        context.fillStyle = color;
+        context.fill();
+        context.shadowBlur = 0;
+        context.lineWidth = driveMode?.isActive && (isFatal || isSerious) ? 2.6 : 1.75;
+        context.strokeStyle = "#ffffff";
+        context.stroke();
+
+        if (driveMode?.isActive && isFatal) {
+          context.beginPath();
+          context.arc(x, y, Math.max(3.2, radius * 0.32), 0, Math.PI * 2);
+          context.fillStyle = "#ffffff";
+          context.fill();
+        }
+
+        nextClickableItems.push({ ...item, x, y, radius: radius + (isFatal ? 10 : isSerious ? 7 : 2) });
+      }
+
+      canvasItemsRef.current = nextClickableItems;
+    });
+  }, [driveMode?.isActive, renderItems, timePhase]);
+
+  const drawLocationCanvas = useCallback(() => {
+    const map = mapRef.current;
+    const canvas = locationCanvasRef.current;
+    if (!map || !canvas) return;
+
+    const size = map.getSize();
+    const pixelRatio = window.devicePixelRatio || 1;
+    const topLeft = map.containerPointToLayerPoint([0, 0]);
+
+    canvas.width = size.x * pixelRatio;
+    canvas.height = size.y * pixelRatio;
+    canvas.style.width = `${size.x}px`;
+    canvas.style.height = `${size.y}px`;
+    L.DomUtil.setPosition(canvas, topLeft);
+
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, size.x, size.y);
+
+    if (!driveMode?.isActive || !driveMode.location) return;
+
+    const point = map.latLngToLayerPoint([
+      driveMode.location.latitude,
+      driveMode.location.longitude,
+    ]);
+    const x = point.x - topLeft.x;
+    const y = point.y - topLeft.y;
+
+    context.save();
+    context.shadowColor = "#38bdf8";
+    context.shadowBlur = 20;
+    context.beginPath();
+    context.arc(x, y, 12, 0, Math.PI * 2);
+    context.fillStyle = "#0284c7";
+    context.fill();
+    context.shadowBlur = 0;
+    context.lineWidth = 3.5;
+    context.strokeStyle = "#ffffff";
+    context.stroke();
+
+    if (typeof driveMode.location.heading === "number") {
+      const headingRadians = (driveMode.location.heading * Math.PI) / 180;
+      context.translate(x, y);
+      context.rotate(headingRadians);
+      context.beginPath();
+      context.moveTo(0, -28);
+      context.lineTo(8, -7);
+      context.lineTo(0, -11);
+      context.lineTo(-8, -7);
+      context.closePath();
+      context.fillStyle = "#38bdf8";
+      context.fill();
+      context.lineWidth = 1.5;
+      context.strokeStyle = "#ffffff";
+      context.stroke();
+    }
+
+    context.restore();
+  }, [driveMode?.isActive, driveMode?.location]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -801,152 +1017,27 @@ export function CrashMap({
   }, [driveMode?.isActive]);
 
   useEffect(() => {
-    const map = mapRef.current;
-    const canvas = canvasRef.current;
-    if (!map || !canvas) return;
+    drawCrashCanvas();
+  }, [drawCrashCanvas]);
 
-    if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current);
-
-    animationFrameRef.current = window.requestAnimationFrame(() => {
-      const size = map.getSize();
-      const pixelRatio = window.devicePixelRatio || 1;
-      const topLeft = map.containerPointToLayerPoint([0, 0]);
-
-      canvas.width = size.x * pixelRatio;
-      canvas.height = size.y * pixelRatio;
-      canvas.style.width = `${size.x}px`;
-      canvas.style.height = `${size.y}px`;
-      L.DomUtil.setPosition(canvas, topLeft);
-
-      const context = canvas.getContext("2d");
-      if (!context) return;
-
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      context.clearRect(0, 0, size.x, size.y);
-      context.font = "700 12px Inter, system-ui, sans-serif";
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-
-      const nextClickableItems: Array<RenderItem & { x: number; y: number; radius: number }> =
-        [];
-
-      for (const item of renderItems) {
-        const layerPoint = map.latLngToLayerPoint([item.latitude, item.longitude]);
-        const x = layerPoint.x - topLeft.x;
-        const y = layerPoint.y - topLeft.y;
-
-        if (item.kind === "cluster") {
-          const riskPerCrash = item.risk / Math.max(item.count, 1);
-          const radius = Math.max(16, Math.min(34, 12 + Math.log2(item.count + 1) * 3.2));
-          const color = getRiskColor(riskPerCrash);
-          const shouldGlow = timePhase === "night" || timePhase === "dusk";
-
-          context.shadowColor = shouldGlow ? color : "transparent";
-          context.shadowBlur = shouldGlow ? 18 : 0;
-
-          context.beginPath();
-          context.arc(x, y, radius + 4, 0, Math.PI * 2);
-          context.fillStyle = `${color}33`;
-          context.fill();
-          context.beginPath();
-          context.arc(x, y, radius, 0, Math.PI * 2);
-          context.fillStyle = color;
-          context.fill();
-          context.lineWidth = 2;
-          context.strokeStyle = "#ffffff";
-          context.stroke();
-          context.shadowBlur = 0;
-          context.fillStyle = "#ffffff";
-          context.fillText(item.count > 999 ? `${Math.round(item.count / 100) / 10}k` : String(item.count), x, y);
-
-          nextClickableItems.push({ ...item, x, y, radius });
-          continue;
-        }
-
-        const radius = item.risk >= 8 ? 7 : item.risk >= 4 ? 6 : 4.5;
-        const color = getCrashColor(item.crash);
-        const shouldGlow = timePhase === "night" || timePhase === "dusk";
-
-          context.shadowColor = shouldGlow || driveMode?.isActive ? color : "transparent";
-          context.shadowBlur = shouldGlow ? 14 : 0;
-
-        context.beginPath();
-        context.arc(x, y, radius, 0, Math.PI * 2);
-        context.fillStyle = color;
-        context.fill();
-        context.shadowBlur = 0;
-        context.lineWidth = 1.75;
-        context.strokeStyle = "#ffffff";
-        context.stroke();
-
-        nextClickableItems.push({ ...item, x, y, radius });
-      }
-
-      canvasItemsRef.current = nextClickableItems;
-    });
-  }, [driveMode?.isActive, renderItems, timePhase, viewState]);
+  useEffect(() => {
+    drawLocationCanvas();
+  }, [drawLocationCanvas]);
 
   useEffect(() => {
     const map = mapRef.current;
-    const canvas = locationCanvasRef.current;
-    if (!map || !canvas) return;
+    if (!map) return;
 
-    const size = map.getSize();
-    const pixelRatio = window.devicePixelRatio || 1;
-    const topLeft = map.containerPointToLayerPoint([0, 0]);
+    const redrawCanvases = () => {
+      drawCrashCanvas();
+      drawLocationCanvas();
+    };
 
-    canvas.width = size.x * pixelRatio;
-    canvas.height = size.y * pixelRatio;
-    canvas.style.width = `${size.x}px`;
-    canvas.style.height = `${size.y}px`;
-    L.DomUtil.setPosition(canvas, topLeft);
-
-    const context = canvas.getContext("2d");
-    if (!context) return;
-
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    context.clearRect(0, 0, size.x, size.y);
-
-    if (!driveMode?.isActive || !driveMode.location) return;
-
-    const point = map.latLngToLayerPoint([
-      driveMode.location.latitude,
-      driveMode.location.longitude,
-    ]);
-    const x = point.x - topLeft.x;
-    const y = point.y - topLeft.y;
-
-    context.save();
-    context.shadowColor = "#38bdf8";
-    context.shadowBlur = 20;
-    context.beginPath();
-    context.arc(x, y, 12, 0, Math.PI * 2);
-    context.fillStyle = "#0284c7";
-    context.fill();
-    context.shadowBlur = 0;
-    context.lineWidth = 3.5;
-    context.strokeStyle = "#ffffff";
-    context.stroke();
-
-    if (typeof driveMode.location.heading === "number") {
-      const headingRadians = (driveMode.location.heading * Math.PI) / 180;
-      context.translate(x, y);
-      context.rotate(headingRadians);
-      context.beginPath();
-      context.moveTo(0, -28);
-      context.lineTo(8, -7);
-      context.lineTo(0, -11);
-      context.lineTo(-8, -7);
-      context.closePath();
-      context.fillStyle = "#38bdf8";
-      context.fill();
-      context.lineWidth = 1.5;
-      context.strokeStyle = "#ffffff";
-      context.stroke();
-    }
-
-    context.restore();
-  }, [driveMode?.isActive, driveMode?.location, viewState]);
+    map.on("move zoom", redrawCanvases);
+    return () => {
+      map.off("move zoom", redrawCanvases);
+    };
+  }, [drawCrashCanvas, drawLocationCanvas]);
 
   useEffect(() => {
     mapRef.current?.invalidateSize();

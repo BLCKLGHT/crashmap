@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { CrashMap } from "./components/CrashMap";
 import { ErrorState } from "./components/ErrorState";
@@ -174,6 +175,15 @@ const formatSpeedKmh = (speedMetresPerSecond?: number): string => {
 
   const speedKmh = Math.max(0, speedMetresPerSecond * 3.6);
   return speedKmh >= 10 ? speedKmh.toFixed(0) : speedKmh.toFixed(1);
+};
+
+const getFatalProximityIntensity = (closestFatalMetres?: number): number => {
+  if (typeof closestFatalMetres !== "number" || !Number.isFinite(closestFatalMetres)) {
+    return 0;
+  }
+
+  if (closestFatalMetres > 500) return 0;
+  return Math.max(0.18, Math.min(1, 1 - closestFatalMetres / 500));
 };
 
 function App() {
@@ -691,6 +701,10 @@ function App() {
   }, [compassHeading, driveLocation, isSimulationMode]);
 
   const currentSpeedLabel = formatSpeedKmh(displayedDriveLocation?.speed);
+  const fatalProximityIntensity = getFatalProximityIntensity(driveRisk?.closestFatalMetres);
+  const fatalProximityStyle = {
+    "--fatal-glow-strength": fatalProximityIntensity.toFixed(3),
+  } as CSSProperties;
 
   return (
     <main
@@ -784,6 +798,14 @@ function App() {
           <strong>{currentSpeedLabel}</strong>
           <small>km/h</small>
         </div>
+      )}
+
+      {isDriveModeActive && fatalProximityIntensity > 0 && (
+        <div
+          className="fatal-proximity-glow"
+          style={fatalProximityStyle}
+          aria-hidden="true"
+        />
       )}
 
       <button

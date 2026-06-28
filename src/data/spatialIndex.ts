@@ -150,6 +150,7 @@ export const getDriveRiskSummary = (
   let fatalCount = 0;
   let seriousCount = 0;
   let propertyDamageCount = 0;
+  let closestFatalMetres: number | undefined;
   let closestSeriousOrFatalMetres: number | undefined;
 
   for (const result of nearby) {
@@ -158,6 +159,10 @@ export const getDriveRiskSummary = (
 
     if (isFatalCrash(result.crash)) {
       fatalCount += 1;
+      closestFatalMetres = Math.min(
+        closestFatalMetres ?? Number.POSITIVE_INFINITY,
+        result.distance,
+      );
       closestSeriousOrFatalMetres = Math.min(
         closestSeriousOrFatalMetres ?? Number.POSITIVE_INFINITY,
         result.distance,
@@ -191,6 +196,8 @@ export const getDriveRiskSummary = (
     seriousCount,
     propertyDamageCount,
     aheadCount: ahead.length,
+    closestFatalMetres:
+      closestFatalMetres === Number.POSITIVE_INFINITY ? undefined : closestFatalMetres,
     closestSeriousOrFatalMetres:
       closestSeriousOrFatalMetres === Number.POSITIVE_INFINITY
         ? undefined
