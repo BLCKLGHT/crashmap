@@ -85,7 +85,7 @@ const LOW_ZOOM_MAX = 8;
 const MEDIUM_ZOOM_MAX = 12;
 const MAX_RENDERED_OBJECTS = 1000;
 const DRIVE_MAX_RENDERED_OBJECTS = 500;
-const DRIVE_HEAT_POINT_LIMIT = 1800;
+const DRIVE_CLOUD_POINT_LIMIT = 1000;
 const VIEW_UPDATE_DELAY_MS = 240;
 const DRIVE_FOLLOW_ZOOM = 15;
 const DRIVE_LOOKAHEAD_METRES = 55;
@@ -199,8 +199,18 @@ const getCrashColor = (crash: CrashRecord): string => {
   return "#0f766e";
 };
 
+const getCrashCloudColor = (crash: CrashRecord, alpha: number): string => {
+  const severity = getSeverityClass(crash);
+  if (severity === "fatal") return `rgba(220, 38, 38, ${alpha})`;
+  if (severity === "serious") return `rgba(217, 119, 6, ${alpha})`;
+  return `rgba(15, 118, 110, ${alpha})`;
+};
+
 const sortByRisk = <Item extends { risk: number }>(items: Item[]): Item[] =>
   items.sort((a, b) => b.risk - a.risk);
+
+const sortByLowRiskFirst = <Item extends { risk: number }>(items: Item[]): Item[] =>
+  items.sort((a, b) => a.risk - b.risk);
 
 const getNormalisedHeading = (heading?: number): number | null => {
   if (typeof heading !== "number" || !Number.isFinite(heading)) return null;
@@ -332,34 +342,14 @@ export function CrashMap({
   const lastSimLocationRef = useRef<DriveLocation | null>(null);
   const [viewState, setViewState] = useState<ViewState | null>(null);
   const [renderItems, setRenderItems] = useState<RenderItem[]>([]);
+  const [driveCloudItems, setDriveCloudItems] = useState<RenderCrash[]>([]);
   const [areaCrashCount, setAreaCrashCount] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
 
   const heatPoints = useMemo(() => {
-    const sourceCrashes = driveMode?.isActive ? crashes : heatmapCrashes ?? crashes;
-    const heatSource = driveMode?.isActive && viewState
-      ? sortByRisk(
-          sourceCrashes
-            .filter((crash) =>
-              viewState.bounds.contains(L.latLng(crash.latitude, crash.longitude)),
-            )
-            .map((crash) => ({
-              crash,
-              risk: getRiskWeight(crash),
-            })),
-        )
-          .slice(0, DRIVE_HEAT_POINT_LIMIT)
-          .map((item) => item.crash)
-      : driveMode?.isActive
-        ? sortByRisk(
-            sourceCrashes.map((crash) => ({
-              crash,
-              risk: getRiskWeight(crash),
-            })),
-          )
-            .slice(0, DRIVE_HEAT_POINT_LIMIT)
-            .map((item) => item.crash)
-        : sourceCrashes;
+    if (driveMode?.isActive) return [];
+
+    const heatSource = heatmapCrashes ?? crashes;
 
     return heatSource.map(
         (crash) =>
@@ -369,7 +359,7 @@ export function CrashMap({
             number,
           ],
       );
-  }, [crashes, driveMode?.isActive, heatmapCrashes, viewState]);
+  }, [crashes, driveMode?.isActive, heatmapCrashes]);
 
   const clusterIndex = useMemo(() => {
     const index = new Supercluster<CrashPointProperties, ClusterProperties>({
@@ -444,6 +434,32 @@ export function CrashMap({
 
       const nextClickableItems: Array<RenderItem & { x: number; y: number; radius: number }> =
         [];
+
+      if (driveMode?.isActive && driveCloudItems.length) {
+        context.save();
+        context.globalCompositeOperation = "source-over";
+
+        for (const item of driveCloudItems) {
+          const layerPoint = map.latLngToLayerPoint([item.latitude, item.longitude]);
+          const x = layerPoint.x - topLeft.x;
+          const y = layerPoint.y - topLeft.y;
+          const severity = getSeverityClass(item.crash);
+          const cloudRadius = severity === "fatal" ? 42 : severity === "serious" ? 36 : 30;
+          const alpha = severity === "fatal" ? 0.18 : severity === "serious" ? 0.14 : 0.1;
+          const gradient = context.createRadialGradient(x, y, 0, x, y, cloudRadius);
+
+          gradient.addColorStop(0, getCrashCloudColor(item.crash, alpha));
+          gradient.addColorStop(0.52, getCrashCloudColor(item.crash, alpha * 0.5));
+          gradient.addColorStop(1, getCrashCloudColor(item.crash, 0));
+
+          context.beginPath();
+          context.arc(x, y, cloudRadius, 0, Math.PI * 2);
+          context.fillStyle = gradient;
+          context.fill();
+        }
+
+        context.restore();
+      }
 
       for (const item of renderItems) {
         const layerPoint = map.latLngToLayerPoint([item.latitude, item.longitude]);
@@ -547,7 +563,7 @@ export function CrashMap({
 
       canvasItemsRef.current = nextClickableItems;
     });
-  }, [driveMode?.isActive, renderItems, timePhase]);
+  }, [driveCloudItems, driveMode?.isActive, renderItems, timePhase]);
 
   const drawLocationCanvas = useCallback(() => {
     const map = mapRef.current;
@@ -830,11 +846,11 @@ export function CrashMap({
       heatRef.current = null;
     }
 
-    if ((mode === "heatmap" || driveMode?.isActive) && heatPoints.length) {
+    if (mode === "heatmap" && !driveMode?.isActive && heatPoints.length) {
       heatRef.current = L.heatLayer(heatPoints, {
         radius: 18,
         blur: 18,
-        minOpacity: driveMode?.isActive ? 0.12 : 0.3,
+        minOpacity: 0.3,
         maxZoom: LOW_ZOOM_MAX,
         gradient: {
           0.2: "#2dd4bf",
@@ -853,6 +869,15 @@ export function CrashMap({
       const visibleCrashes = crashes.filter((crash) =>
         viewState.bounds.contains(L.latLng(crash.latitude, crash.longitude)),
       );
+      const visibleCloudCrashes = sortByLowRiskFirst(
+        visibleCrashes.map((crash): RenderCrash => ({
+          kind: "crash",
+          latitude: crash.latitude,
+          longitude: crash.longitude,
+          crash,
+          risk: getRiskWeight(crash),
+        })),
+      ).slice(0, DRIVE_CLOUD_POINT_LIMIT);
       const visibleDriveCrashes = sortByRisk(
         visibleCrashes.map((crash): RenderCrash => ({
           kind: "crash",
@@ -864,10 +889,13 @@ export function CrashMap({
       ).slice(0, DRIVE_MAX_RENDERED_OBJECTS);
 
       setAreaCrashCount(visibleCrashes.length);
+      setDriveCloudItems(visibleCloudCrashes);
       setRenderItems(visibleDriveCrashes);
       setIsUpdating(false);
       return;
     }
+
+    setDriveCloudItems([]);
 
     if (mode === "heatmap") {
       setRenderItems([]);
