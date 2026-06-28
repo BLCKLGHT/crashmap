@@ -223,7 +223,7 @@ button:disabled {
   display: grid;
   grid-template-columns: auto auto;
   column-gap: 0.32rem;
-  align-items: baseline;
+  align-items: center;
 }
 
 .speed-overlay span {
@@ -247,6 +247,31 @@ button:disabled {
   font-size: 0.68rem;
   font-weight: 850;
   line-height: 1;
+}
+
+.speed-sign {
+  display: inline-grid;
+  place-items: center;
+  width: 2.45rem;
+  aspect-ratio: 1;
+  border: 4px solid #dc2626;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgba(20, 34, 28, 0.08),
+    0 4px 12px rgba(18, 27, 23, 0.16);
+  color: #111;
+  font-size: 1.04rem;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+}
+
+.speed-sign--panel {
+  width: 2.3rem;
+  border-width: 3.5px;
+  font-size: 0.98rem;
+  box-shadow: 0 2px 8px rgba(18, 27, 23, 0.12);
 }
 
 .fatal-proximity-glow {
@@ -404,6 +429,12 @@ button:disabled {
 .drive-stats strong {
   color: var(--ink);
   font-size: 0.95rem;
+}
+
+.drive-stats .speed-sign {
+  color: #111;
+  font-size: 0.98rem;
+  line-height: 1;
 }
 
 .drive-warning {

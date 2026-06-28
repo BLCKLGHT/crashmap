@@ -807,8 +807,16 @@ function App() {
           </div>
           <div>
             <span>Zone</span>
-            <strong>{currentSpeedZoneLabel}</strong>
-            <small>km/h</small>
+            <strong
+              className="speed-sign"
+              aria-label={
+                driveRisk?.nearbySpeedZone
+                  ? `Nearby recorded speed zone ${currentSpeedZoneLabel} kilometres per hour`
+                  : "Nearby recorded speed zone unavailable"
+              }
+            >
+              {currentSpeedZoneLabel}
+            </strong>
           </div>
         </div>
       )}

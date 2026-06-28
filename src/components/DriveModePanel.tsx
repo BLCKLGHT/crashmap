@@ -38,6 +38,8 @@ const formatHeadingSource = (source?: DriveLocation["headingSource"]): string =>
   return "Heading";
 };
 
+const formatSpeedZone = (speedZone?: string): string => speedZone || "--";
+
 export function DriveModePanel({
   isActive,
   isSimulation,
@@ -97,7 +99,18 @@ export function DriveModePanel({
             </div>
             <div>
               <span>Zone</span>
-              <strong>{risk?.nearbySpeedZone ? `${risk.nearbySpeedZone} km/h` : "--"}</strong>
+              <strong
+                className="speed-sign speed-sign--panel"
+                aria-label={
+                  risk?.nearbySpeedZone
+                    ? `Nearby recorded speed zone ${formatSpeedZone(
+                        risk.nearbySpeedZone,
+                      )} kilometres per hour`
+                    : "Nearby recorded speed zone unavailable"
+                }
+              >
+                {formatSpeedZone(risk?.nearbySpeedZone)}
+              </strong>
             </div>
             <div>
               <span>Nearby</span>
