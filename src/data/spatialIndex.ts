@@ -110,6 +110,18 @@ const queryRadius = (
   return results;
 };
 
+const normaliseSpeedZone = (speedZone?: string): string | undefined => {
+  if (!speedZone) return undefined;
+  const value = speedZone.trim();
+  if (!value || /not (known|stated)/i.test(value)) return undefined;
+
+  const numeric = value.match(/\d+/)?.[0];
+  if (!numeric) return value;
+
+  const speed = Number(numeric);
+  return Number.isFinite(speed) ? String(speed) : value;
+};
+
 export const createCrashSpatialIndex = (crashes: CrashRecord[]): CrashSpatialIndex => {
   const cells = new Map<string, IndexedCrash[]>();
 
@@ -132,6 +144,7 @@ export const getDriveRiskSummary = (
   if (!index || !location) return null;
 
   const nearby = queryRadius(index, location.latitude, location.longitude, radiusMetres);
+  nearby.sort((a, b) => a.distance - b.distance);
   const aheadPoint =
     typeof location.heading === "number" && Number.isFinite(location.heading)
       ? projectPoint(
@@ -150,12 +163,14 @@ export const getDriveRiskSummary = (
   let fatalCount = 0;
   let seriousCount = 0;
   let propertyDamageCount = 0;
+  let nearbySpeedZone: string | undefined;
   let closestFatalMetres: number | undefined;
   let closestSeriousOrFatalMetres: number | undefined;
 
   for (const result of nearby) {
     nearbyIds.add(result.crash.id);
     nearbyCrashes.push(result.crash);
+    nearbySpeedZone ??= normaliseSpeedZone(result.crash.speedZone);
 
     if (isFatalCrash(result.crash)) {
       fatalCount += 1;
@@ -196,6 +211,7 @@ export const getDriveRiskSummary = (
     seriousCount,
     propertyDamageCount,
     aheadCount: ahead.length,
+    nearbySpeedZone,
     closestFatalMetres:
       closestFatalMetres === Number.POSITIVE_INFINITY ? undefined : closestFatalMetres,
     closestSeriousOrFatalMetres:

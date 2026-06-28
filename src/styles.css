@@ -209,15 +209,21 @@ button:disabled {
   z-index: 660;
   display: grid;
   grid-template-columns: auto auto;
-  column-gap: 0.36rem;
-  align-items: baseline;
-  min-width: 5.4rem;
+  gap: 0.52rem;
+  min-width: 8.8rem;
   border: 1px solid rgba(20, 34, 28, 0.16);
   border-radius: 10px;
   background: rgba(255, 255, 251, 0.94);
   box-shadow: 0 10px 32px rgba(18, 27, 23, 0.18);
   color: var(--ink);
   padding: 0.45rem 0.62rem 0.5rem;
+}
+
+.speed-overlay div {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 0.32rem;
+  align-items: baseline;
 }
 
 .speed-overlay span {
@@ -231,7 +237,7 @@ button:disabled {
 }
 
 .speed-overlay strong {
-  font-size: 1.45rem;
+  font-size: 1.34rem;
   font-weight: 950;
   line-height: 1;
 }

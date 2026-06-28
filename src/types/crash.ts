@@ -46,6 +46,7 @@ export type DriveRiskSummary = {
   seriousCount: number;
   propertyDamageCount: number;
   aheadCount: number;
+  nearbySpeedZone?: string;
   closestFatalMetres?: number;
   closestSeriousOrFatalMetres?: number;
   warningTitle?: string;

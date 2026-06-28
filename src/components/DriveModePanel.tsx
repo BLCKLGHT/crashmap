@@ -96,6 +96,10 @@ export function DriveModePanel({
               <strong>{formatSpeed(location?.speed)}</strong>
             </div>
             <div>
+              <span>Zone</span>
+              <strong>{risk?.nearbySpeedZone ? `${risk.nearbySpeedZone} km/h` : "--"}</strong>
+            </div>
+            <div>
               <span>Nearby</span>
               <strong>{risk?.totalCount ?? 0}</strong>
             </div>

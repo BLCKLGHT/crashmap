@@ -177,6 +177,11 @@ const formatSpeedKmh = (speedMetresPerSecond?: number): string => {
   return speedKmh >= 10 ? speedKmh.toFixed(0) : speedKmh.toFixed(1);
 };
 
+const formatSpeedZone = (speedZone?: string): string => {
+  if (!speedZone) return "--";
+  return speedZone;
+};
+
 const getFatalProximityIntensity = (closestFatalMetres?: number): number => {
   if (typeof closestFatalMetres !== "number" || !Number.isFinite(closestFatalMetres)) {
     return 0;
@@ -701,6 +706,7 @@ function App() {
   }, [compassHeading, driveLocation, isSimulationMode]);
 
   const currentSpeedLabel = formatSpeedKmh(displayedDriveLocation?.speed);
+  const currentSpeedZoneLabel = formatSpeedZone(driveRisk?.nearbySpeedZone);
   const fatalProximityIntensity = getFatalProximityIntensity(driveRisk?.closestFatalMetres);
   const fatalProximityStyle = {
     "--fatal-glow-strength": fatalProximityIntensity.toFixed(3),
@@ -794,9 +800,16 @@ function App() {
 
       {isDriveModeActive && (
         <div className="speed-overlay" aria-live="polite">
-          <span>Speed</span>
-          <strong>{currentSpeedLabel}</strong>
-          <small>km/h</small>
+          <div>
+            <span>Speed</span>
+            <strong>{currentSpeedLabel}</strong>
+            <small>km/h</small>
+          </div>
+          <div>
+            <span>Zone</span>
+            <strong>{currentSpeedZoneLabel}</strong>
+            <small>km/h</small>
+          </div>
         </div>
       )}
 

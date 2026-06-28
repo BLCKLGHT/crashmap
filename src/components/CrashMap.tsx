@@ -529,7 +529,7 @@ export function CrashMap({
           ? isFatal
             ? 14
             : isSerious
-              ? 10
+              ? 7
               : 4.75
           : item.risk >= 8
             ? 7
@@ -542,7 +542,7 @@ export function CrashMap({
           ? isFatal
             ? 28
             : isSerious
-              ? 18
+              ? 10
               : 8
           : shouldGlow
             ? 14
@@ -550,18 +550,18 @@ export function CrashMap({
 
         if (driveMode?.isActive && (isFatal || isSerious)) {
           context.shadowColor = color;
-          context.shadowBlur = isFatal ? 28 : 14;
+          context.shadowBlur = isFatal ? 28 : 9;
           context.beginPath();
           context.arc(
             x,
             y,
-            radius + (isFatal ? 10 : 6),
+            radius + (isFatal ? 10 : 3.5),
             0,
             Math.PI * 2,
           );
           context.fillStyle = isFatal
             ? "rgba(220, 38, 38, 0.24)"
-            : "rgba(217, 119, 6, 0.22)";
+            : "rgba(217, 119, 6, 0.16)";
           context.fill();
           context.shadowBlur = 0;
 
@@ -569,11 +569,11 @@ export function CrashMap({
           context.arc(
             x,
             y,
-            radius + (isFatal ? 5 : 3),
+            radius + (isFatal ? 5 : 2),
             0,
             Math.PI * 2,
           );
-          context.lineWidth = isFatal ? 3.4 : 2.5;
+          context.lineWidth = isFatal ? 3.4 : 2;
           context.strokeStyle = isFatal
             ? "rgba(255, 255, 255, 0.95)"
             : "rgba(255, 255, 255, 0.9)";
@@ -587,7 +587,7 @@ export function CrashMap({
         context.fillStyle = color;
         context.fill();
         context.shadowBlur = 0;
-        context.lineWidth = driveMode?.isActive && (isFatal || isSerious) ? 2.6 : 1.75;
+        context.lineWidth = driveMode?.isActive && (isFatal || isSerious) ? (isFatal ? 2.6 : 2) : 1.75;
         context.strokeStyle = "#ffffff";
         context.stroke();
 
@@ -602,7 +602,7 @@ export function CrashMap({
           ...item,
           x,
           y,
-          radius: radius + (isFatal ? 16 : isSerious ? 7 : 2),
+          radius: radius + (isFatal ? 16 : isSerious ? 4 : 2),
         });
       }
 
