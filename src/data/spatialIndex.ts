@@ -290,6 +290,7 @@ export const getDashboardLookaheadRisk = (
   let seriousCount = 0;
   let fatalCount = 0;
   let propertyDamageCount = 0;
+  let nearestCrashDistanceMetres: number | undefined;
 
   for (const result of candidates) {
     if (!hasHeading) break;
@@ -311,6 +312,10 @@ export const getDashboardLookaheadRisk = (
     }
 
     totalCrashCount += 1;
+    nearestCrashDistanceMetres = Math.min(
+      nearestCrashDistanceMetres ?? Number.POSITIVE_INFINITY,
+      forwardMetres,
+    );
     if (isFatalCrash(result.crash)) fatalCount += 1;
     else if (isSeriousCrash(result.crash)) seriousCount += 1;
     else propertyDamageCount += 1;
@@ -325,6 +330,10 @@ export const getDashboardLookaheadRisk = (
     seriousCount,
     fatalCount,
     propertyDamageCount,
+    nearestCrashDistanceMetres:
+      nearestCrashDistanceMetres === Number.POSITIVE_INFINITY
+        ? undefined
+        : nearestCrashDistanceMetres,
     hasHeading,
     ...classification,
   };

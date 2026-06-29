@@ -63,6 +63,7 @@ export type DashboardLookaheadRisk = {
   seriousCount: number;
   fatalCount: number;
   propertyDamageCount: number;
+  nearestCrashDistanceMetres?: number;
   riskLevel: DashboardCrashRiskLevel;
   label: string;
   message: string;

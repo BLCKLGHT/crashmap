@@ -51,6 +51,25 @@ const getCarLengths = (speedMetresPerSecond?: number): number => {
 
 const getVisibleCarCount = (carLengths: number): number => Math.max(1, Math.min(carLengths, 8));
 
+const getRoadHistoryDistanceLabel = (lookaheadRisk: DashboardLookaheadRisk | null): string => {
+  if (!lookaheadRisk || !lookaheadRisk.hasHeading || lookaheadRisk.riskLevel === "low") {
+    return `In next ${lookaheadRisk?.lookaheadDistanceMetres ?? 500} m`;
+  }
+
+  if (typeof lookaheadRisk.nearestCrashDistanceMetres !== "number") {
+    return `In next ${lookaheadRisk.lookaheadDistanceMetres} m`;
+  }
+
+  const roundedDistance = Math.max(
+    10,
+    Math.min(
+      lookaheadRisk.lookaheadDistanceMetres,
+      Math.ceil(lookaheadRisk.nearestCrashDistanceMetres / 10) * 10,
+    ),
+  );
+  return `In ${roundedDistance} m`;
+};
+
 export function DashboardMode({
   isActive,
   isSimulation,
@@ -69,6 +88,7 @@ export function DashboardMode({
   const visibleCars = getVisibleCarCount(carLengths);
   const risk = lookaheadRisk?.riskLevel ?? "low";
   const hasHeading = lookaheadRisk?.hasHeading ?? false;
+  const distanceLabel = getRoadHistoryDistanceLabel(lookaheadRisk);
 
   return (
     <section className={`dashboard-mode dashboard-mode--${risk}`}>
@@ -133,7 +153,7 @@ export function DashboardMode({
 
       <div className="dashboard-history">
         <span>Road history ahead</span>
-        <strong>In next {lookaheadRisk?.lookaheadDistanceMetres ?? 500} m</strong>
+        <strong>{distanceLabel}</strong>
         <h2>{hasHeading ? lookaheadRisk?.label ?? "Low crash history ahead" : "Waiting for heading"}</h2>
         <p>{hasHeading ? lookaheadRisk?.message : "Move forward or use simulation to assess the road ahead."}</p>
         <div className="dashboard-history__stats">

@@ -671,7 +671,7 @@ function App() {
     setDriveError(null);
     setIsSimulationMode(true);
     setIsDriveModeActive(true);
-    setIsSimulationDriving(false);
+    setIsSimulationDriving(true);
     setCompassHeading(null);
     simulationSegmentRef.current = 0;
     simulationSegmentMetresRef.current = 0;
@@ -713,6 +713,13 @@ function App() {
   const displayedDriveLocation = useMemo<DriveLocation | null>(() => {
     if (!driveLocation) return null;
     if (isSimulationMode || compassHeading === null) return driveLocation;
+    if (
+      (driveLocation.headingSource === "gps" || driveLocation.headingSource === "movement") &&
+      typeof driveLocation.heading === "number" &&
+      (driveLocation.speed ?? 0) >= 1.8
+    ) {
+      return driveLocation;
+    }
 
     return {
       ...driveLocation,
