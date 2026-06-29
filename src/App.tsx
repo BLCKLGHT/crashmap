@@ -929,10 +929,10 @@ function App() {
           <div>
             <span>Speed</span>
             <strong>{currentSpeedLabel}</strong>
+            <small>km/h</small>
             <em className={`speed-overspeed ${overspeedDelta !== null ? "is-visible" : ""}`}>
               {overspeedDelta !== null ? `+${overspeedDelta}km/h` : "+0km/h"}
             </em>
-            <small>km/h</small>
           </div>
           <div>
             <span>Zone</span>
