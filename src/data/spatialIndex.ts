@@ -133,10 +133,12 @@ const classifyLookaheadRisk = (
   fatalCount: number,
 ): Pick<DashboardLookaheadRisk, "riskLevel" | "label" | "message"> => {
   // Initial awareness thresholds, not a live hazard model:
-  // high = any fatality, multiple serious crashes, or heavy total crash history;
+  // high = any fatality, multiple serious crashes, or very heavy total crash history;
   // medium = at least one serious crash or a moderate crash cluster;
   // low = sparse property-only crash history.
-  if (fatalCount >= 1 || seriousCount >= 2 || totalCrashCount >= 15) {
+  // The total-count threshold is intentionally higher than the drive-mode warning threshold
+  // because Dashboard Mode looks 500m ahead on roads with dense historical records.
+  if (fatalCount >= 1 || seriousCount >= 2 || totalCrashCount >= 25) {
     return {
       riskLevel: "high",
       label: "High crash history ahead",
@@ -147,7 +149,7 @@ const classifyLookaheadRisk = (
     };
   }
 
-  if (seriousCount >= 1 || totalCrashCount >= 5) {
+  if (seriousCount >= 1 || totalCrashCount >= 8) {
     return {
       riskLevel: "medium",
       label: "Medium crash history ahead",
