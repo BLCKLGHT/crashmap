@@ -403,18 +403,23 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.26rem;
-  max-width: min(21rem, 92vw);
+  gap: 0.34rem;
+  max-width: min(27rem, 94vw);
   color: #fff;
   filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.28));
+}
+
+.dashboard-cars svg {
+  width: clamp(2.35rem, 11vw, 3.35rem);
+  height: clamp(2.35rem, 11vw, 3.35rem);
 }
 
 .dashboard-cars__plus {
   display: inline-grid;
   place-items: center;
-  min-width: 1.55rem;
+  min-width: 2rem;
   color: #fff;
-  font-size: 1.45rem;
+  font-size: clamp(1.8rem, 8vw, 2.7rem);
   font-weight: 950;
   line-height: 1;
 }
@@ -446,14 +451,6 @@ button:disabled {
   margin: 0;
   font-size: clamp(1.5rem, 7vw, 3rem);
   line-height: 1;
-}
-
-.dashboard-history p {
-  max-width: 28rem;
-  margin: 0;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 1rem;
-  font-weight: 800;
 }
 
 .dashboard-history__stats {
@@ -1496,6 +1493,19 @@ input[type="range"] {
 
   .dashboard-distance strong {
     font-size: clamp(1.3rem, 9vh, 2.2rem);
+  }
+
+  .dashboard-cars {
+    max-width: min(22rem, 26vw);
+  }
+
+  .dashboard-cars svg {
+    width: clamp(1.95rem, 8vh, 2.75rem);
+    height: clamp(1.95rem, 8vh, 2.75rem);
+  }
+
+  .dashboard-cars__plus {
+    font-size: clamp(1.5rem, 7vh, 2.1rem);
   }
 
   .dashboard-history {

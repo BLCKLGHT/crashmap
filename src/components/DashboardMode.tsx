@@ -90,6 +90,14 @@ const getRoadHistoryDistanceLabel = (lookaheadRisk: DashboardLookaheadRisk | nul
   return `In ${roundedDistance} m`;
 };
 
+const getRoadHistoryHeadline = (lookaheadRisk: DashboardLookaheadRisk | null): string => {
+  if (!lookaheadRisk?.hasHeading) return "Waiting for movement";
+  if (lookaheadRisk.riskLevel === "low") return "No elevated history ahead";
+  if (lookaheadRisk.fatalCount > 0) return "Fatal record ahead";
+  if (lookaheadRisk.riskLevel === "high") return "High crash history";
+  return "Medium crash history";
+};
+
 export function DashboardMode({
   isActive,
   isSimulation,
@@ -108,8 +116,8 @@ export function DashboardMode({
   const visibleCars = getVisibleCarCount(carLengths);
   const hasMoreCarLengths = carLengths > 10;
   const risk = lookaheadRisk?.riskLevel ?? "low";
-  const hasHeading = lookaheadRisk?.hasHeading ?? false;
   const distanceLabel = getRoadHistoryDistanceLabel(lookaheadRisk);
+  const historyHeadline = getRoadHistoryHeadline(lookaheadRisk);
   const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
 
   return (
@@ -169,7 +177,7 @@ export function DashboardMode({
         </div>
         <div className="dashboard-cars" aria-hidden="true">
           {Array.from({ length: visibleCars }).map((_, index) => (
-            <Car key={index} size={28} strokeWidth={2.4} />
+            <Car key={index} size={44} strokeWidth={2.35} />
           ))}
           {hasMoreCarLengths && <span className="dashboard-cars__plus">+</span>}
         </div>
@@ -180,8 +188,7 @@ export function DashboardMode({
       <div className="dashboard-history">
         <span>Road history ahead</span>
         <strong>{distanceLabel}</strong>
-        <h2>{hasHeading ? lookaheadRisk?.label ?? "Low crash history ahead" : "Waiting for heading"}</h2>
-        <p>{hasHeading ? lookaheadRisk?.message : "Move forward or use simulation to assess the road ahead."}</p>
+        <h2>{historyHeadline}</h2>
         <div className="dashboard-history__stats">
           <div>
             <span>Crashes</span>
