@@ -1735,3 +1735,16 @@ input[type="range"] {
     font-size: 0.62rem;
   }
 }
+
+@media (max-width: 719px) and (orientation: portrait) {
+  .fullscreen-toggle,
+  .app--drive-active .fullscreen-toggle {
+    top: calc(max(10px, env(safe-area-inset-top)) + 3.35rem);
+    right: max(10px, env(safe-area-inset-right));
+  }
+
+  .app.app--chrome-hidden .fullscreen-toggle {
+    top: max(10px, env(safe-area-inset-top));
+    right: max(10px, env(safe-area-inset-right));
+  }
+}
