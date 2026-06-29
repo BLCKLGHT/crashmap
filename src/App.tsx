@@ -47,7 +47,18 @@ const GPS_BOOTSTRAP_MAX_ACCURACY_METRES = 250;
 const GPS_JITTER_METRES = 9;
 const GPS_POSITION_EASING = 0.38;
 const SIMULATION_STEP_MS = 250;
-const SIMULATION_SPEED_MPS = 13.9;
+const SIMULATION_BASE_SPEED_MPS = 13.9;
+
+const SIMULATION_SPEED_SPIKES: Array<{
+  segmentIndex: number;
+  startProgress: number;
+  endProgress: number;
+  speedKmh: number;
+}> = [
+  { segmentIndex: 1, startProgress: 0.18, endProgress: 0.48, speedKmh: 59 },
+  { segmentIndex: 3, startProgress: 0.28, endProgress: 0.6, speedKmh: 60 },
+  { segmentIndex: 6, startProgress: 0.12, endProgress: 0.42, speedKmh: 64 },
+];
 
 const SIMULATION_ROUTE: Array<{ latitude: number; longitude: number }> = [
   { latitude: -42.8821, longitude: 147.3272 },
@@ -184,6 +195,39 @@ const formatSpeedKmh = (speedMetresPerSecond?: number): string => {
 const formatSpeedZone = (speedZone?: string): string => {
   if (!speedZone) return "--";
   return speedZone;
+};
+
+const parseSpeedLimitKmh = (speedZone?: string): number | null => {
+  if (!speedZone) return null;
+  const numericValue = Number(speedZone.match(/\d+/)?.[0]);
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const getOverspeedDeltaKmh = (
+  speedMetresPerSecond?: number,
+  speedZone?: string,
+): number | null => {
+  if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) {
+    return null;
+  }
+
+  const speedLimit = parseSpeedLimitKmh(speedZone);
+  if (speedLimit === null) return null;
+
+  const currentSpeed = Math.round(Math.max(0, speedMetresPerSecond * 3.6));
+  const delta = currentSpeed - speedLimit;
+  return delta > 0 ? delta : null;
+};
+
+const getSimulationSpeedMps = (segmentIndex: number, progress: number): number => {
+  const spike = SIMULATION_SPEED_SPIKES.find(
+    (candidate) =>
+      candidate.segmentIndex === segmentIndex &&
+      progress >= candidate.startProgress &&
+      progress <= candidate.endProgress,
+  );
+
+  return spike ? spike.speedKmh / 3.6 : SIMULATION_BASE_SPEED_MPS;
 };
 
 const getFatalProximityIntensity = (closestFatalMetres?: number): number => {
@@ -526,7 +570,18 @@ function App() {
       simulationLastTickRef.current = now;
 
       let segmentIndex = simulationSegmentRef.current;
-      let segmentMetres = simulationSegmentMetresRef.current + elapsedSeconds * SIMULATION_SPEED_MPS;
+      const currentSegment = SIMULATION_ROUTE[segmentIndex];
+      const nextSegment = SIMULATION_ROUTE[segmentIndex + 1] ?? currentSegment;
+      const currentSegmentLength = getDistanceMetres(
+        currentSegment.latitude,
+        currentSegment.longitude,
+        nextSegment.latitude,
+        nextSegment.longitude,
+      );
+      const currentProgress =
+        currentSegmentLength > 0 ? simulationSegmentMetresRef.current / currentSegmentLength : 0;
+      const simulationSpeed = getSimulationSpeedMps(segmentIndex, currentProgress);
+      let segmentMetres = simulationSegmentMetresRef.current + elapsedSeconds * simulationSpeed;
 
       while (segmentIndex < SIMULATION_ROUTE.length - 1) {
         const from = SIMULATION_ROUTE[segmentIndex];
@@ -567,7 +622,7 @@ function App() {
         longitude: point.longitude,
         heading: getBearingDegrees(from.latitude, from.longitude, to.latitude, to.longitude),
         headingSource: "simulated",
-        speed: SIMULATION_SPEED_MPS,
+        speed: getSimulationSpeedMps(segmentIndex, progress),
         timestamp: now,
         isSimulated: true,
       });
@@ -730,6 +785,10 @@ function App() {
 
   const currentSpeedLabel = formatSpeedKmh(displayedDriveLocation?.speed);
   const currentSpeedZoneLabel = formatSpeedZone(driveRisk?.nearbySpeedZone);
+  const overspeedDelta = getOverspeedDeltaKmh(
+    displayedDriveLocation?.speed,
+    driveRisk?.nearbySpeedZone,
+  );
   const fatalProximityIntensity = getFatalProximityIntensity(driveRisk?.closestFatalMetres);
   const fatalProximityStyle = {
     "--fatal-glow-strength": fatalProximityIntensity.toFixed(3),
@@ -870,6 +929,9 @@ function App() {
           <div>
             <span>Speed</span>
             <strong>{currentSpeedLabel}</strong>
+            {overspeedDelta !== null && (
+              <em className="speed-overspeed">+{overspeedDelta}km/h</em>
+            )}
             <small>km/h</small>
           </div>
           <div>

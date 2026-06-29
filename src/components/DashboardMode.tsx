@@ -27,6 +27,28 @@ const formatSpeedKmh = (speedMetresPerSecond?: number): string => {
 
 const formatSpeedZone = (speedZone?: string): string => speedZone || "--";
 
+const parseSpeedLimitKmh = (speedZone?: string): number | null => {
+  if (!speedZone) return null;
+  const numericValue = Number(speedZone.match(/\d+/)?.[0]);
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const getOverspeedDeltaKmh = (
+  speedMetresPerSecond?: number,
+  speedZone?: string,
+): number | null => {
+  if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) {
+    return null;
+  }
+
+  const speedLimit = parseSpeedLimitKmh(speedZone);
+  if (speedLimit === null) return null;
+
+  const currentSpeed = Math.round(Math.max(0, speedMetresPerSecond * 3.6));
+  const delta = currentSpeed - speedLimit;
+  return delta > 0 ? delta : null;
+};
+
 const getStoppingDistanceMetres = (speedMetresPerSecond?: number): number | null => {
   if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) {
     return null;
@@ -89,6 +111,7 @@ export function DashboardMode({
   const risk = lookaheadRisk?.riskLevel ?? "low";
   const hasHeading = lookaheadRisk?.hasHeading ?? false;
   const distanceLabel = getRoadHistoryDistanceLabel(lookaheadRisk);
+  const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
 
   return (
     <section className={`dashboard-mode dashboard-mode--${risk}`}>
@@ -131,6 +154,9 @@ export function DashboardMode({
         <div className="dashboard-speed-readout">
           <span>Current</span>
           <strong>{formatSpeedKmh(location?.speed)}</strong>
+          {overspeedDelta !== null && (
+            <em className="dashboard-overspeed">+{overspeedDelta}km/h</em>
+          )}
           <small>km/h</small>
         </div>
       </div>
