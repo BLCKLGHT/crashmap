@@ -76,7 +76,8 @@ button:disabled {
 .app.app--chrome-hidden .map-mode,
 .app.app--chrome-hidden .map-updating,
 .app.app--chrome-hidden .sheet-backdrop,
-.app.app--chrome-hidden .timeline-counter {
+.app.app--chrome-hidden .timeline-counter,
+.app.app--chrome-hidden .view-toggle {
   display: none !important;
 }
 
@@ -88,6 +89,10 @@ button:disabled {
 .app.app--drive-active .top-bar,
 .app.app--drive-active .filter-fab,
 .app.app--drive-active .timeline-counter {
+  display: none;
+}
+
+.app.app--dashboard-mode .top-bar {
   display: none;
 }
 
@@ -200,6 +205,247 @@ button:disabled {
   font-size: 0.78rem;
   font-weight: 900;
   padding: 0 0.82rem;
+}
+
+.view-toggle {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  z-index: 670;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.18rem;
+  width: min(20rem, calc(100vw - 8rem));
+  transform: translateX(-50%);
+  border: 1px solid rgba(20, 34, 28, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 251, 0.9);
+  box-shadow: 0 10px 32px rgba(18, 27, 23, 0.14);
+  padding: 0.18rem;
+}
+
+.view-toggle button {
+  min-height: 2.15rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 950;
+}
+
+.view-toggle button.is-active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.dashboard-mode {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-rows: 32vh 27vh 1fr;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #08100e;
+  color: #fff;
+  transition: background 420ms ease;
+}
+
+.dashboard-mode--low {
+  background: linear-gradient(180deg, #07131d 0%, #0a2841 58%, #075985 100%);
+}
+
+.dashboard-mode--medium {
+  background: linear-gradient(180deg, #171008 0%, #713f12 58%, #c76613 100%);
+}
+
+.dashboard-mode--high {
+  background: linear-gradient(180deg, #170808 0%, #7f1d1d 58%, #dc2626 100%);
+}
+
+.dashboard-mode__controls {
+  position: absolute;
+  top: max(4.1rem, calc(env(safe-area-inset-top) + 3.8rem));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 20;
+  display: flex;
+  gap: 0.42rem;
+}
+
+.dashboard-mode__controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  min-height: 2.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 950;
+  padding: 0 0.68rem;
+}
+
+.dashboard-mode__top {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 1rem;
+  padding: max(5.8rem, calc(env(safe-area-inset-top) + 5.4rem)) 1.15rem 1.2rem;
+}
+
+.dashboard-speed-sign {
+  display: inline-grid;
+  place-items: center;
+  width: clamp(7rem, 34vw, 10rem);
+  aspect-ratio: 1;
+  justify-self: start;
+  border: clamp(0.7rem, 3vw, 0.95rem) solid #dc2626;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.36);
+  color: #111;
+  font-size: clamp(2.3rem, 13vw, 4rem);
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.dashboard-speed-readout {
+  display: grid;
+  justify-items: end;
+  gap: 0.1rem;
+  text-align: right;
+}
+
+.dashboard-speed-readout span,
+.dashboard-distance p,
+.dashboard-history span,
+.dashboard-history__stats span {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dashboard-speed-readout strong {
+  font-size: clamp(2.6rem, 16vw, 5rem);
+  font-weight: 950;
+  line-height: 0.9;
+}
+
+.dashboard-speed-readout small {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.dashboard-distance {
+  position: relative;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  overflow: hidden;
+  border-block: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.8rem 1rem;
+  text-align: center;
+}
+
+.dashboard-road-depth {
+  position: absolute;
+  inset: 0 20%;
+  display: grid;
+  opacity: 0.26;
+  transform: perspective(9rem) rotateX(58deg);
+  transform-origin: bottom;
+}
+
+.dashboard-road-depth span {
+  border-top: 2px solid rgba(255, 255, 255, 0.7);
+}
+
+.dashboard-cars {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.26rem;
+  max-width: min(21rem, 92vw);
+  color: #fff;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.28));
+}
+
+.dashboard-distance strong {
+  position: relative;
+  z-index: 1;
+  font-size: clamp(1.6rem, 8vw, 3.4rem);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.dashboard-history {
+  display: grid;
+  align-content: center;
+  gap: 0.55rem;
+  padding: 1rem 1.15rem max(1.1rem, env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.1);
+  transition: background 420ms ease;
+}
+
+.dashboard-history strong {
+  font-size: clamp(2.2rem, 13vw, 4.7rem);
+  font-weight: 950;
+  line-height: 0.9;
+}
+
+.dashboard-history h2 {
+  margin: 0;
+  font-size: clamp(1.5rem, 7vw, 3rem);
+  line-height: 1;
+}
+
+.dashboard-history p {
+  max-width: 28rem;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.dashboard-history__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.48rem;
+  max-width: 30rem;
+}
+
+.dashboard-history__stats div {
+  display: grid;
+  gap: 0.1rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 0.55rem 0.62rem;
+}
+
+.dashboard-history__stats strong {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.dashboard-history small {
+  max-width: 30rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.dashboard-error {
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
 .speed-overlay {
@@ -1137,6 +1383,63 @@ input[type="range"] {
 }
 
 @media (max-height: 520px) and (orientation: landscape) {
+  .view-toggle {
+    top: max(10px, env(safe-area-inset-top));
+    width: min(19rem, calc(100vw - 7rem));
+  }
+
+  .dashboard-mode {
+    grid-template-rows: 1fr;
+    grid-template-columns: 35vw 29vw 1fr;
+  }
+
+  .dashboard-mode__controls {
+    top: max(10px, env(safe-area-inset-top));
+    right: max(10px, env(safe-area-inset-right));
+  }
+
+  .dashboard-mode__top {
+    grid-template-columns: 1fr;
+    align-content: center;
+    justify-items: center;
+    padding: calc(max(10px, env(safe-area-inset-top)) + 2.9rem) 0.75rem max(10px, env(safe-area-inset-bottom));
+  }
+
+  .dashboard-speed-sign {
+    width: min(8.4rem, 28vh);
+    justify-self: center;
+  }
+
+  .dashboard-speed-readout {
+    justify-items: center;
+    text-align: center;
+  }
+
+  .dashboard-speed-readout strong {
+    font-size: clamp(2rem, 13vh, 3.2rem);
+  }
+
+  .dashboard-distance {
+    border-block: 0;
+    border-inline: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .dashboard-distance strong {
+    font-size: clamp(1.3rem, 9vh, 2.2rem);
+  }
+
+  .dashboard-history {
+    padding: calc(max(10px, env(safe-area-inset-top)) + 2.6rem) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) 0.9rem;
+  }
+
+  .dashboard-history strong {
+    font-size: clamp(1.8rem, 12vh, 3.2rem);
+  }
+
+  .dashboard-history h2 {
+    font-size: clamp(1.2rem, 8vh, 2rem);
+  }
+
   .top-bar {
     top: max(10px, env(safe-area-inset-top));
     right: auto;

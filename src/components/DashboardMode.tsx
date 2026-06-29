@@ -1,0 +1,158 @@
+import { Car, CarFront, FlaskConical, Pause, Play, Square } from "lucide-react";
+import type { DashboardLookaheadRisk, DriveLocation, DriveRiskSummary } from "../types/crash";
+
+type DashboardModeProps = {
+  isActive: boolean;
+  isSimulation: boolean;
+  isSimulationDriving: boolean;
+  location: DriveLocation | null;
+  driveRisk: DriveRiskSummary | null;
+  lookaheadRisk: DashboardLookaheadRisk | null;
+  error: string | null;
+  onStartDrive: () => void;
+  onStartSimulation: () => void;
+  onToggleSimulationDrive: () => void;
+  onStopDrive: () => void;
+};
+
+const CAR_LENGTH_METRES = 5;
+
+const formatSpeedKmh = (speedMetresPerSecond?: number): string => {
+  if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) {
+    return "--";
+  }
+
+  return String(Math.round(Math.max(0, speedMetresPerSecond * 3.6)));
+};
+
+const formatSpeedZone = (speedZone?: string): string => speedZone || "--";
+
+const getStoppingDistanceMetres = (speedMetresPerSecond?: number): number | null => {
+  if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) {
+    return null;
+  }
+
+  const speed = Math.max(0, speedMetresPerSecond);
+  // Awareness-only model assumptions:
+  // - 2000 kg SUV context, but this simple kinematic model is grip/deceleration limited, so mass cancels out.
+  // - 1.5s reaction time.
+  // - 6.5 m/s^2 dry-road deceleration, roughly firm braking on a dry sealed road.
+  // - 5m assumed vehicle length for a glanceable following-distance cue.
+  const reactionTimeSeconds = 1.5;
+  const dryRoadDeceleration = 6.5;
+  return speed * reactionTimeSeconds + (speed * speed) / (2 * dryRoadDeceleration);
+};
+
+const getCarLengths = (speedMetresPerSecond?: number): number => {
+  const stoppingDistance = getStoppingDistanceMetres(speedMetresPerSecond);
+  if (stoppingDistance === null) return 0;
+  return Math.max(1, Math.ceil(stoppingDistance / CAR_LENGTH_METRES));
+};
+
+const getVisibleCarCount = (carLengths: number): number => Math.max(1, Math.min(carLengths, 8));
+
+export function DashboardMode({
+  isActive,
+  isSimulation,
+  isSimulationDriving,
+  location,
+  driveRisk,
+  lookaheadRisk,
+  error,
+  onStartDrive,
+  onStartSimulation,
+  onToggleSimulationDrive,
+  onStopDrive,
+}: DashboardModeProps) {
+  const speedZone = formatSpeedZone(driveRisk?.nearbySpeedZone);
+  const carLengths = getCarLengths(location?.speed);
+  const visibleCars = getVisibleCarCount(carLengths);
+  const risk = lookaheadRisk?.riskLevel ?? "low";
+  const hasHeading = lookaheadRisk?.hasHeading ?? false;
+
+  return (
+    <section className={`dashboard-mode dashboard-mode--${risk}`}>
+      <div className="dashboard-mode__controls" aria-label="Dashboard mode controls">
+        {!isActive ? (
+          <>
+            <button type="button" onClick={onStartDrive}>
+              <CarFront size={18} aria-hidden="true" />
+              <span>Start</span>
+            </button>
+            <button type="button" onClick={onStartSimulation}>
+              <FlaskConical size={17} aria-hidden="true" />
+              <span>Sim</span>
+            </button>
+          </>
+        ) : (
+          <>
+            {isSimulation && (
+              <button type="button" onClick={onToggleSimulationDrive}>
+                {isSimulationDriving ? (
+                  <Pause size={17} aria-hidden="true" />
+                ) : (
+                  <Play size={17} aria-hidden="true" />
+                )}
+                <span>{isSimulationDriving ? "Pause" : "Auto"}</span>
+              </button>
+            )}
+            <button type="button" onClick={onStopDrive}>
+              <Square size={15} aria-hidden="true" />
+              <span>Stop</span>
+            </button>
+          </>
+        )}
+      </div>
+
+      <div className="dashboard-mode__top">
+        <div className="dashboard-speed-sign" aria-label={`Speed zone ${speedZone}`}>
+          {speedZone}
+        </div>
+        <div className="dashboard-speed-readout">
+          <span>Current</span>
+          <strong>{formatSpeedKmh(location?.speed)}</strong>
+          <small>km/h</small>
+        </div>
+      </div>
+
+      <div className="dashboard-distance" aria-label={`Recommended space ${carLengths} car lengths`}>
+        <div className="dashboard-road-depth" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="dashboard-cars" aria-hidden="true">
+          {Array.from({ length: visibleCars }).map((_, index) => (
+            <Car key={index} size={28} strokeWidth={2.4} />
+          ))}
+        </div>
+        <p>Recommended space</p>
+        <strong>{carLengths || "--"} car lengths</strong>
+      </div>
+
+      <div className="dashboard-history">
+        <span>Road history ahead</span>
+        <strong>In next {lookaheadRisk?.lookaheadDistanceMetres ?? 500} m</strong>
+        <h2>{hasHeading ? lookaheadRisk?.label ?? "Low crash history ahead" : "Waiting for heading"}</h2>
+        <p>{hasHeading ? lookaheadRisk?.message : "Move forward or use simulation to assess the road ahead."}</p>
+        <div className="dashboard-history__stats">
+          <div>
+            <span>Crashes</span>
+            <strong>{lookaheadRisk?.totalCrashCount ?? 0}</strong>
+          </div>
+          <div>
+            <span>Serious</span>
+            <strong>{lookaheadRisk?.seriousCount ?? 0}</strong>
+          </div>
+          <div>
+            <span>Fatal</span>
+            <strong>{lookaheadRisk?.fatalCount ?? 0}</strong>
+          </div>
+        </div>
+        <small>Historical crash data only. Not live navigation or real-time hazard detection.</small>
+        {error && <small className="dashboard-error">{error}</small>}
+      </div>
+    </section>
+  );
+}

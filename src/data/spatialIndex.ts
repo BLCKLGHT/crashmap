@@ -1,5 +1,10 @@
 import { isFatalCrash, isSeriousCrash } from "./filterCrashes";
-import type { CrashRecord, DriveLocation, DriveRiskSummary } from "../types/crash";
+import type {
+  CrashRecord,
+  DashboardLookaheadRisk,
+  DriveLocation,
+  DriveRiskSummary,
+} from "../types/crash";
 
 const CELL_SIZE_DEGREES = 0.01;
 const EARTH_RADIUS_METRES = 6371000;
@@ -122,6 +127,41 @@ const normaliseSpeedZone = (speedZone?: string): string | undefined => {
   return Number.isFinite(speed) ? String(speed) : value;
 };
 
+const classifyLookaheadRisk = (
+  totalCrashCount: number,
+  seriousCount: number,
+  fatalCount: number,
+): Pick<DashboardLookaheadRisk, "riskLevel" | "label" | "message"> => {
+  // Initial awareness thresholds, not a live hazard model:
+  // high = any fatality, multiple serious crashes, or heavy total crash history;
+  // medium = at least one serious crash or a moderate crash cluster;
+  // low = sparse property-only crash history.
+  if (fatalCount >= 1 || seriousCount >= 2 || totalCrashCount >= 15) {
+    return {
+      riskLevel: "high",
+      label: "High crash history ahead",
+      message:
+        fatalCount >= 1
+          ? "Fatal crash recorded in this road segment"
+          : "High crash history recorded in this road segment",
+    };
+  }
+
+  if (seriousCount >= 1 || totalCrashCount >= 5) {
+    return {
+      riskLevel: "medium",
+      label: "Medium crash history ahead",
+      message: "Medium crash history recorded in this road segment",
+    };
+  }
+
+  return {
+    riskLevel: "low",
+    label: "Low crash history ahead",
+    message: "Low crash history recorded in this road segment",
+  };
+};
+
 export const createCrashSpatialIndex = (crashes: CrashRecord[]): CrashSpatialIndex => {
   const cells = new Map<string, IndexedCrash[]>();
 
@@ -223,5 +263,69 @@ export const getDriveRiskSummary = (
       ? "Historical crash data only. Not live navigation or real-time hazard detection."
       : undefined,
     nearbyCrashes,
+  };
+};
+
+export const getDashboardLookaheadRisk = (
+  index: CrashSpatialIndex | null,
+  location: DriveLocation | null,
+  lookaheadDistanceMetres = 500,
+  corridorWidthMetres = 80,
+): DashboardLookaheadRisk | null => {
+  if (!index || !location) return null;
+
+  const heading =
+    typeof location.heading === "number" && Number.isFinite(location.heading)
+      ? ((location.heading % 360) + 360) % 360
+      : undefined;
+  const hasHeading = heading !== undefined;
+  const searchRadius = Math.hypot(lookaheadDistanceMetres, corridorWidthMetres / 2);
+  const candidates = queryRadius(index, location.latitude, location.longitude, searchRadius);
+  const headingRadians = toRadians(heading ?? 0);
+  const forwardUnitX = Math.sin(headingRadians);
+  const forwardUnitY = Math.cos(headingRadians);
+  const halfWidth = corridorWidthMetres / 2;
+
+  let totalCrashCount = 0;
+  let seriousCount = 0;
+  let fatalCount = 0;
+  let propertyDamageCount = 0;
+
+  for (const result of candidates) {
+    if (!hasHeading) break;
+
+    const northMetres = (result.crash.latitude - location.latitude) * 111320;
+    const eastMetres =
+      (result.crash.longitude - location.longitude) *
+      111320 *
+      Math.max(Math.cos(toRadians(location.latitude)), 0.18);
+    const forwardMetres = eastMetres * forwardUnitX + northMetres * forwardUnitY;
+    const lateralMetres = Math.abs(eastMetres * forwardUnitY - northMetres * forwardUnitX);
+
+    if (
+      forwardMetres <= 0 ||
+      forwardMetres > lookaheadDistanceMetres ||
+      lateralMetres > halfWidth
+    ) {
+      continue;
+    }
+
+    totalCrashCount += 1;
+    if (isFatalCrash(result.crash)) fatalCount += 1;
+    else if (isSeriousCrash(result.crash)) seriousCount += 1;
+    else propertyDamageCount += 1;
+  }
+
+  const classification = classifyLookaheadRisk(totalCrashCount, seriousCount, fatalCount);
+
+  return {
+    lookaheadDistanceMetres,
+    corridorWidthMetres,
+    totalCrashCount,
+    seriousCount,
+    fatalCount,
+    propertyDamageCount,
+    hasHeading,
+    ...classification,
   };
 };

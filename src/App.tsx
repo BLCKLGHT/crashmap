@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { CrashMap } from "./components/CrashMap";
+import { DashboardMode } from "./components/DashboardMode";
 import { ErrorState } from "./components/ErrorState";
 import { FilterPanel } from "./components/FilterPanel";
 import { LoadingState } from "./components/LoadingState";
@@ -14,6 +15,7 @@ import {
 import { defaultFilters, filterCrashes } from "./data/filterCrashes";
 import {
   createCrashSpatialIndex,
+  getDashboardLookaheadRisk,
   getDriveRiskSummary,
 } from "./data/spatialIndex";
 import type {
@@ -32,6 +34,8 @@ type DeviceOrientationEventWithCompass = DeviceOrientationEvent & {
 type DeviceOrientationEventConstructorWithPermission = typeof DeviceOrientationEvent & {
   requestPermission?: () => Promise<"granted" | "denied">;
 };
+
+type AppViewMode = "map" | "dashboard";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const crashTimeCache = new WeakMap<CrashRecord, number | null>();
@@ -202,6 +206,7 @@ function App() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isTimeOfDayEnabled, setIsTimeOfDayEnabled] = useState(true);
   const [isChromeHidden, setIsChromeHidden] = useState(false);
+  const [viewMode, setViewMode] = useState<AppViewMode>("map");
   const [isDriveModeActive, setIsDriveModeActive] = useState(false);
   const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [isSimulationDriving, setIsSimulationDriving] = useState(false);
@@ -626,6 +631,17 @@ function App() {
     [crashSpatialIndex, driveLocation, isDriveModeActive],
   );
 
+  const dashboardLookaheadRisk = useMemo(
+    () =>
+      getDashboardLookaheadRisk(
+        crashSpatialIndex,
+        isDriveModeActive ? driveLocation : null,
+        500,
+        80,
+      ),
+    [crashSpatialIndex, driveLocation, isDriveModeActive],
+  );
+
   const startDriveMode = async () => {
     setDriveError(null);
     setIsSimulationMode(false);
@@ -716,31 +732,71 @@ function App() {
     <main
       className={`app ${isChromeHidden ? "app--chrome-hidden" : ""} ${
         isDriveModeActive ? "app--drive-active" : ""
-      }`}
+      } ${viewMode === "dashboard" ? "app--dashboard-mode" : ""}`}
     >
-      <CrashMap
-        crashes={mapCrashes}
-        heatmapCrashes={filteredCrashes}
-        timePhase={timePhase}
-        isFullscreen={isChromeHidden}
-        driveMode={{
-          isActive: isDriveModeActive,
-          isSimulation: isSimulationMode,
-          location: displayedDriveLocation,
-          nearbyCrashes: driveRisk?.nearbyCrashes ?? [],
-          onSimulatedLocationChange: (location) => {
-            if (!isSimulationMode) return;
-            setIsSimulationDriving(false);
-            setDriveLocation({
-              ...location,
-              speed: 0,
-              headingSource: "simulated",
-              timestamp: Date.now(),
-              isSimulated: true,
-            });
-          },
-        }}
-      />
+      {viewMode === "map" ? (
+        <CrashMap
+          crashes={mapCrashes}
+          heatmapCrashes={filteredCrashes}
+          timePhase={timePhase}
+          isFullscreen={isChromeHidden}
+          driveMode={{
+            isActive: isDriveModeActive,
+            isSimulation: isSimulationMode,
+            location: displayedDriveLocation,
+            nearbyCrashes: driveRisk?.nearbyCrashes ?? [],
+            onSimulatedLocationChange: (location) => {
+              if (!isSimulationMode) return;
+              setIsSimulationDriving(false);
+              setDriveLocation({
+                ...location,
+                speed: 0,
+                headingSource: "simulated",
+                timestamp: Date.now(),
+                isSimulated: true,
+              });
+            },
+          }}
+        />
+      ) : (
+        <DashboardMode
+          isActive={isDriveModeActive}
+          isSimulation={isSimulationMode}
+          isSimulationDriving={isSimulationDriving}
+          location={displayedDriveLocation}
+          driveRisk={driveRisk}
+          lookaheadRisk={dashboardLookaheadRisk}
+          error={driveError}
+          onStartDrive={startDriveMode}
+          onStartSimulation={startSimulationMode}
+          onToggleSimulationDrive={toggleSimulationDrive}
+          onStopDrive={stopDriveMode}
+        />
+      )}
+
+      <div className="view-toggle" role="tablist" aria-label="View mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewMode === "map"}
+          className={viewMode === "map" ? "is-active" : ""}
+          onClick={() => setViewMode("map")}
+        >
+          Map Mode
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewMode === "dashboard"}
+          className={viewMode === "dashboard" ? "is-active" : ""}
+          onClick={() => {
+            setViewMode("dashboard");
+            setIsFilterOpen(false);
+          }}
+        >
+          Dashboard Mode
+        </button>
+      </div>
 
       <header className="top-bar app-chrome">
         <div>
@@ -753,37 +809,41 @@ function App() {
         </p>
       </header>
 
-      <FilterPanel
-        crashes={dataState.crashes}
-        filteredCount={filteredCrashes.length}
-        filters={filters}
-        isOpen={isFilterOpen}
-        fetchedAt={dataState.fetchedAt}
-        isRefreshing={isRefreshing}
-        timeline={timeline}
-        isTimeOfDayEnabled={isTimeOfDayEnabled}
-        onChange={setFilters}
-        onTimelineChange={setTimeline}
-        onTimeOfDayToggle={() => setIsTimeOfDayEnabled((enabled) => !enabled)}
-        onRefresh={() => void loadCrashData({ refresh: true })}
-        onOpen={() => setIsFilterOpen(true)}
-        onClose={() => setIsFilterOpen(false)}
-      />
+      {viewMode === "map" && (
+        <FilterPanel
+          crashes={dataState.crashes}
+          filteredCount={filteredCrashes.length}
+          filters={filters}
+          isOpen={isFilterOpen}
+          fetchedAt={dataState.fetchedAt}
+          isRefreshing={isRefreshing}
+          timeline={timeline}
+          isTimeOfDayEnabled={isTimeOfDayEnabled}
+          onChange={setFilters}
+          onTimelineChange={setTimeline}
+          onTimeOfDayToggle={() => setIsTimeOfDayEnabled((enabled) => !enabled)}
+          onRefresh={() => void loadCrashData({ refresh: true })}
+          onOpen={() => setIsFilterOpen(true)}
+          onClose={() => setIsFilterOpen(false)}
+        />
+      )}
 
-      <DriveModePanel
-        isActive={isDriveModeActive}
-        isSimulation={isSimulationMode}
-        location={displayedDriveLocation}
-        risk={driveRisk}
-        error={driveError}
-        onStart={startDriveMode}
-        onStartSimulation={startSimulationMode}
-        isSimulationDriving={isSimulationDriving}
-        onToggleSimulationDrive={toggleSimulationDrive}
-        onStop={stopDriveMode}
-      />
+      {viewMode === "map" && (
+        <DriveModePanel
+          isActive={isDriveModeActive}
+          isSimulation={isSimulationMode}
+          location={displayedDriveLocation}
+          risk={driveRisk}
+          error={driveError}
+          onStart={startDriveMode}
+          onStartSimulation={startSimulationMode}
+          isSimulationDriving={isSimulationDriving}
+          onToggleSimulationDrive={toggleSimulationDrive}
+          onStop={stopDriveMode}
+        />
+      )}
 
-      {timeline && (
+      {viewMode === "map" && timeline && (
         <div className={`timeline-counter timeline-counter--${timePhase}`} aria-live="polite">
           <span>{timeline.isPlaybackView ? "Timeline frame" : "Selected range"}</span>
           <strong>
@@ -798,7 +858,7 @@ function App() {
         </div>
       )}
 
-      {isDriveModeActive && (
+      {viewMode === "map" && isDriveModeActive && (
         <div className="speed-overlay" aria-live="polite">
           <div>
             <span>Speed</span>
@@ -821,7 +881,7 @@ function App() {
         </div>
       )}
 
-      {isDriveModeActive && fatalProximityIntensity > 0 && (
+      {viewMode === "map" && isDriveModeActive && fatalProximityIntensity > 0 && (
         <div
           className="fatal-proximity-glow"
           style={fatalProximityStyle}

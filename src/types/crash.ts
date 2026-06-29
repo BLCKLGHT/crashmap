@@ -54,6 +54,21 @@ export type DriveRiskSummary = {
   nearbyCrashes: CrashRecord[];
 };
 
+export type DashboardCrashRiskLevel = "low" | "medium" | "high";
+
+export type DashboardLookaheadRisk = {
+  lookaheadDistanceMetres: number;
+  corridorWidthMetres: number;
+  totalCrashCount: number;
+  seriousCount: number;
+  fatalCount: number;
+  propertyDamageCount: number;
+  riskLevel: DashboardCrashRiskLevel;
+  label: string;
+  message: string;
+  hasHeading: boolean;
+};
+
 export type CrashDataState = {
   crashes: CrashRecord[];
   fetchedAt?: string;
