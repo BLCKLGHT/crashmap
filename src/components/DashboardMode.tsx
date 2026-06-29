@@ -153,9 +153,9 @@ export function DashboardMode({
         <div className="dashboard-speed-readout">
           <span>Current</span>
           <strong>{formatSpeedKmh(location?.speed)}</strong>
-          {overspeedDelta !== null && (
-            <em className="dashboard-overspeed">+{overspeedDelta}km/h</em>
-          )}
+          <em className={`dashboard-overspeed ${overspeedDelta !== null ? "is-visible" : ""}`}>
+            {overspeedDelta !== null ? `+${overspeedDelta}km/h` : "+0km/h"}
+          </em>
           <small>km/h</small>
         </div>
       </div>

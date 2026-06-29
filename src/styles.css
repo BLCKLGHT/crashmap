@@ -332,7 +332,20 @@ button:disabled {
   font-style: normal;
   font-weight: 950;
   line-height: 1;
+  opacity: 0;
   padding: 0.38rem 0.58rem;
+  transform: translateY(-0.25rem) scale(0.92);
+  transition:
+    opacity 220ms ease-in-out,
+    transform 220ms ease-in-out,
+    visibility 220ms ease-in-out;
+  visibility: hidden;
+}
+
+.dashboard-overspeed.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  visibility: visible;
 }
 
 .dashboard-speed-readout span,
@@ -525,7 +538,20 @@ button:disabled {
   font-style: normal;
   font-weight: 950;
   line-height: 1;
+  opacity: 0;
   padding: 0.2rem 0.34rem;
+  transform: translateY(-0.12rem) scale(0.92);
+  transition:
+    opacity 200ms ease-in-out,
+    transform 200ms ease-in-out,
+    visibility 200ms ease-in-out;
+  visibility: hidden;
+}
+
+.speed-overspeed.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  visibility: visible;
 }
 
 .speed-overlay small {
