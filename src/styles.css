@@ -396,6 +396,16 @@ button:disabled {
   filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.28));
 }
 
+.dashboard-cars__plus {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.55rem;
+  color: #fff;
+  font-size: 1.45rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
 .dashboard-distance strong {
   position: relative;
   z-index: 1;

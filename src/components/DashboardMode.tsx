@@ -16,6 +16,7 @@ type DashboardModeProps = {
 };
 
 const CAR_LENGTH_METRES = 5;
+const REACTION_TIME_SECONDS = 1.5;
 
 const formatSpeedKmh = (speedMetresPerSecond?: number): string => {
   if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) {
@@ -49,29 +50,26 @@ const getOverspeedDeltaKmh = (
   return delta > 0 ? delta : null;
 };
 
-const getStoppingDistanceMetres = (speedMetresPerSecond?: number): number | null => {
+const getReactionDistanceMetres = (speedMetresPerSecond?: number): number | null => {
   if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) {
     return null;
   }
 
   const speed = Math.max(0, speedMetresPerSecond);
-  // Awareness-only model assumptions:
-  // - 2000 kg SUV context, but this simple kinematic model is grip/deceleration limited, so mass cancels out.
-  // - 1.5s reaction time.
-  // - 6.5 m/s^2 dry-road deceleration, roughly firm braking on a dry sealed road.
-  // - 5m assumed vehicle length for a glanceable following-distance cue.
-  const reactionTimeSeconds = 1.5;
-  const dryRoadDeceleration = 6.5;
-  return speed * reactionTimeSeconds + (speed * speed) / (2 * dryRoadDeceleration);
+  // Awareness-only visual cue assumptions:
+  // - reaction distance only, not full stopping distance;
+  // - 1.5s default reaction time;
+  // - 5m assumed vehicle length for the car-length visual.
+  return speed * REACTION_TIME_SECONDS;
 };
 
 const getCarLengths = (speedMetresPerSecond?: number): number => {
-  const stoppingDistance = getStoppingDistanceMetres(speedMetresPerSecond);
-  if (stoppingDistance === null) return 0;
-  return Math.max(1, Math.ceil(stoppingDistance / CAR_LENGTH_METRES));
+  const reactionDistance = getReactionDistanceMetres(speedMetresPerSecond);
+  if (reactionDistance === null || reactionDistance <= 0) return 0;
+  return Math.max(1, Math.round(reactionDistance / CAR_LENGTH_METRES));
 };
 
-const getVisibleCarCount = (carLengths: number): number => Math.max(1, Math.min(carLengths, 8));
+const getVisibleCarCount = (carLengths: number): number => Math.min(carLengths, 10);
 
 const getRoadHistoryDistanceLabel = (lookaheadRisk: DashboardLookaheadRisk | null): string => {
   if (!lookaheadRisk || !lookaheadRisk.hasHeading || lookaheadRisk.riskLevel === "low") {
@@ -108,6 +106,7 @@ export function DashboardMode({
   const speedZone = formatSpeedZone(driveRisk?.nearbySpeedZone);
   const carLengths = getCarLengths(location?.speed);
   const visibleCars = getVisibleCarCount(carLengths);
+  const hasMoreCarLengths = carLengths > 10;
   const risk = lookaheadRisk?.riskLevel ?? "low";
   const hasHeading = lookaheadRisk?.hasHeading ?? false;
   const distanceLabel = getRoadHistoryDistanceLabel(lookaheadRisk);
@@ -172,6 +171,7 @@ export function DashboardMode({
           {Array.from({ length: visibleCars }).map((_, index) => (
             <Car key={index} size={28} strokeWidth={2.4} />
           ))}
+          {hasMoreCarLengths && <span className="dashboard-cars__plus">+</span>}
         </div>
         <p>Recommended space</p>
         <strong>{carLengths || "--"} car lengths</strong>
