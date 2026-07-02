@@ -675,7 +675,7 @@ function App() {
   }, [isDriveModeActive, isSimulationMode]);
 
   useEffect(() => {
-    if (!isDriveModeActive || isSimulationMode || !driveLocation) return;
+    if (!isDriveModeActive || !driveLocation) return;
     if (weatherState.status === "loading") return;
 
     const now = Date.now();
@@ -734,7 +734,6 @@ function App() {
   }, [
     driveLocation,
     isDriveModeActive,
-    isSimulationMode,
     weatherState.fetchedAt,
     weatherState.latitude,
     weatherState.longitude,

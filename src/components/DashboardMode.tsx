@@ -100,8 +100,15 @@ const getRoadHistoryDistanceLabel = (lookaheadRisk: DashboardLookaheadRisk | nul
   return `In ${roundedDistance} m`;
 };
 
-const getConditionLabel = (conditions: CurrentDrivingConditions | null): string => {
-  if (!conditions) return "Weather unavailable";
+const getConditionLabel = (
+  conditions: CurrentDrivingConditions | null,
+  status: WeatherState["status"],
+): string => {
+  if (!conditions) {
+    if (status === "error") return "Weather unavailable";
+    if (status === "loading" || status === "idle") return "checking weather";
+    return "Weather unavailable";
+  }
   const surface =
     conditions.surfaceCondition === "wet"
       ? "wet road"
@@ -166,7 +173,7 @@ export function DashboardMode({
   const risk = lookaheadRisk?.riskLevel ?? "low";
   const distanceLabel = getRoadHistoryDistanceLabel(lookaheadRisk);
   const historyHeadline = getRoadHistoryHeadline(lookaheadRisk, currentConditions);
-  const conditionLabel = getConditionLabel(currentConditions);
+  const conditionLabel = getConditionLabel(currentConditions, weatherStatus);
   const hasConditionData = lookaheadRisk?.conditionDataAvailable ?? false;
   const matchedCrashCount = lookaheadRisk?.matchedCrashCount ?? 0;
   const showMatchedStats = currentConditions !== null && hasConditionData;

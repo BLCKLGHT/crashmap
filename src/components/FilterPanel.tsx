@@ -75,8 +75,15 @@ const formatTimelineDateTime = (time?: number): string => {
 const clamp = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, value));
 
-const formatConditionLabel = (conditions: CurrentDrivingConditions | null): string => {
-  if (!conditions) return "Weather unavailable";
+const formatConditionLabel = (
+  conditions: CurrentDrivingConditions | null,
+  status: WeatherState["status"],
+): string => {
+  if (!conditions) {
+    if (status === "error") return "Weather unavailable";
+    if (status === "loading" || status === "idle") return "checking weather";
+    return "Weather unavailable";
+  }
   const surface = conditions.surfaceCondition === "wet" ? "wet road" : conditions.surfaceCondition;
   const light = conditions.lightCondition.replace("_", "/");
   return `${surface}, ${light}`;
@@ -334,7 +341,7 @@ export function FilterPanel({
             </button>
           </div>
           <p className="filter-note">
-            Current condition: {formatConditionLabel(currentConditions)}
+            Current condition: {formatConditionLabel(currentConditions, weatherStatus)}
             {weatherStatus === "loading" ? " · updating" : ""}
           </p>
         </div>
