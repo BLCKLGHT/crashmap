@@ -4,6 +4,7 @@ import type {
   DashboardLookaheadRisk,
   DriveLocation,
   DriveRiskSummary,
+  HistoricalWeatherMatchState,
   WeatherState,
 } from "../types/crash";
 
@@ -16,6 +17,7 @@ type DashboardModeProps = {
   lookaheadRisk: DashboardLookaheadRisk | null;
   currentConditions: CurrentDrivingConditions | null;
   weatherStatus: WeatherState["status"];
+  weatherMatchStatus: HistoricalWeatherMatchState["status"];
   error: string | null;
   onStartDrive: () => void;
   onStartSimulation: () => void;
@@ -126,6 +128,21 @@ const getRoadHistoryHeadline = (
     : "Medium crash history";
 };
 
+const getWeatherMatchLabel = (
+  status: HistoricalWeatherMatchState["status"],
+  lookaheadRisk: DashboardLookaheadRisk | null,
+): string => {
+  if (status === "off") return "Weather match: off";
+  if (status === "checking") return "Weather match: checking";
+  if (status === "error") return "Historical weather unavailable";
+  if (status === "limited") return "Weather match: limited data";
+  if ((lookaheadRisk?.matchedCrashCount ?? 0) > 0) {
+    if ((lookaheadRisk?.wetCrashCount ?? 0) > 0) return "Weather match: wet-history match";
+    return "Weather match: similar conditions";
+  }
+  return "Weather match: no strong match";
+};
+
 export function DashboardMode({
   isActive,
   isSimulation,
@@ -135,6 +152,7 @@ export function DashboardMode({
   lookaheadRisk,
   currentConditions,
   weatherStatus,
+  weatherMatchStatus,
   error,
   onStartDrive,
   onStartSimulation,
@@ -152,6 +170,7 @@ export function DashboardMode({
   const hasConditionData = lookaheadRisk?.conditionDataAvailable ?? false;
   const matchedCrashCount = lookaheadRisk?.matchedCrashCount ?? 0;
   const showMatchedStats = currentConditions !== null && hasConditionData;
+  const weatherMatchLabel = getWeatherMatchLabel(weatherMatchStatus, lookaheadRisk);
   const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
 
   return (
@@ -222,6 +241,7 @@ export function DashboardMode({
       <div className="dashboard-history">
         <span>Road history ahead</span>
         <strong>{distanceLabel}</strong>
+        <p className="dashboard-history__condition">{weatherMatchLabel}</p>
         <p className="dashboard-history__condition">Current condition: {conditionLabel}</p>
         <h2>{historyHeadline}</h2>
         <div className="dashboard-history__stats">

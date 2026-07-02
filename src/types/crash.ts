@@ -11,23 +11,30 @@ export type CrashRecord = {
   locationDescription?: string;
 };
 
-export type SurfaceCondition = "dry" | "wet" | "unknown";
+export type SurfaceCondition = "dry" | "wet" | "snow_ice" | "unknown";
 export type NormalisedLightCondition = "daylight" | "dark" | "dawn_dusk" | "unknown";
+export type VisibilityCondition = "clear" | "reduced" | "unknown";
+export type WindCondition = "normal" | "windy" | "unknown";
 
 export type CurrentDrivingConditions = {
   surfaceCondition: SurfaceCondition;
   lightCondition: NormalisedLightCondition;
+  visibilityCondition: VisibilityCondition;
+  windCondition: WindCondition;
   isRaining: boolean;
   weatherLabel: string;
 };
 
 export type WeatherMatchMode = "all" | "similar" | "strict" | "weighted";
-export type WeatherMapFilterMode = "weighted" | "all" | "wet" | "dry" | "dark";
+export type WeatherMatchSetting = "off" | "current" | "historical";
 
 export type CurrentWeather = {
   precipitation?: number;
   rain?: number;
+  showers?: number;
+  snowfall?: number;
   weatherCode?: number;
+  cloudCover?: number;
   temperature?: number;
   visibility?: number;
   windSpeed?: number;
@@ -50,7 +57,47 @@ export type CrashFilters = {
   speedZone: string;
   lightCondition: string;
   surfaceType: string;
-  weatherMode: WeatherMapFilterMode;
+  weatherMode: WeatherMatchSetting;
+};
+
+export type HistoricalCrashWeather = {
+  crashId: string;
+  dateTime?: string;
+  precipitation?: number;
+  rain?: number;
+  snowfall?: number;
+  weatherCode?: number;
+  isWet: boolean;
+  isRain: boolean;
+  isSnowOrIce: boolean;
+  isWindy: boolean;
+  isDarkEstimate: boolean;
+  confidence: "high" | "medium" | "low";
+  conditions: {
+    surface: SurfaceCondition;
+    visibility: VisibilityCondition;
+    wind: WindCondition;
+    light: NormalisedLightCondition;
+  };
+};
+
+export type HistoricalWeatherMatch = {
+  crashId: string;
+  weatherMatch: boolean;
+  wetMatch: boolean;
+  lightMatch: boolean;
+  windMatch: boolean;
+  visibilityMatch: boolean;
+  scoreMultiplier: number;
+  confidence: HistoricalCrashWeather["confidence"];
+};
+
+export type HistoricalWeatherMatchState = {
+  status: "off" | "idle" | "checking" | "ready" | "limited" | "error";
+  matches: Record<string, HistoricalWeatherMatch>;
+  matchedCrashIds: string[];
+  checkedCrashCount: number;
+  error?: string;
 };
 
 export type TimelineState = {
@@ -108,6 +155,7 @@ export type DashboardLookaheadRisk = {
   conditionMatchScore: number;
   conditionLabel?: string;
   conditionDataAvailable: boolean;
+  weatherMatchStatus?: HistoricalWeatherMatchState["status"];
   riskLevel: DashboardCrashRiskLevel;
   label: string;
   message: string;

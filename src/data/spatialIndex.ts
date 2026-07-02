@@ -6,6 +6,7 @@ import type {
   DashboardLookaheadRisk,
   DriveLocation,
   DriveRiskSummary,
+  HistoricalWeatherMatch,
   WeatherMatchMode,
 } from "../types/crash";
 
@@ -17,6 +18,13 @@ type IndexedCrash = {
   crash: CrashRecord;
   latitude: number;
   longitude: number;
+};
+
+export type LookaheadCrash = {
+  crash: CrashRecord;
+  forwardMetres: number;
+  lateralMetres: number;
+  distance: number;
 };
 
 export type CrashSpatialIndex = {
@@ -128,6 +136,14 @@ const normaliseSpeedZone = (speedZone?: string): string | undefined => {
 
   const speed = Number(numeric);
   return Number.isFinite(speed) ? String(speed) : value;
+};
+
+const getSeverityScore = (crash: CrashRecord): number => {
+  if (isFatalCrash(crash)) return 10;
+  if (isSeriousCrash(crash)) return 5;
+  const severity = crash.severity?.toLowerCase() ?? "";
+  if (severity.includes("minor") || severity.includes("injury")) return 2;
+  return 1;
 };
 
 const classifyLookaheadRisk = (
@@ -272,6 +288,54 @@ export const getDriveRiskSummary = (
   };
 };
 
+export const getDashboardLookaheadCrashes = (
+  index: CrashSpatialIndex | null,
+  location: DriveLocation | null,
+  lookaheadDistanceMetres = 500,
+  corridorWidthMetres = 80,
+): LookaheadCrash[] => {
+  if (!index || !location || typeof location.heading !== "number") return [];
+
+  const heading = ((location.heading % 360) + 360) % 360;
+  const searchRadius = Math.hypot(lookaheadDistanceMetres, corridorWidthMetres / 2);
+  const candidates = queryRadius(index, location.latitude, location.longitude, searchRadius);
+  const headingRadians = toRadians(heading);
+  const forwardUnitX = Math.sin(headingRadians);
+  const forwardUnitY = Math.cos(headingRadians);
+  const halfWidth = corridorWidthMetres / 2;
+  const lookahead: LookaheadCrash[] = [];
+
+  for (const result of candidates) {
+    const northMetres = (result.crash.latitude - location.latitude) * 111320;
+    const eastMetres =
+      (result.crash.longitude - location.longitude) *
+      111320 *
+      Math.max(Math.cos(toRadians(location.latitude)), 0.18);
+    const forwardMetres = eastMetres * forwardUnitX + northMetres * forwardUnitY;
+    const lateralMetres = Math.abs(eastMetres * forwardUnitY - northMetres * forwardUnitX);
+
+    if (
+      forwardMetres <= 0 ||
+      forwardMetres > lookaheadDistanceMetres ||
+      lateralMetres > halfWidth
+    ) {
+      continue;
+    }
+
+    lookahead.push({
+      crash: result.crash,
+      forwardMetres,
+      lateralMetres,
+      distance: result.distance,
+    });
+  }
+
+  return lookahead.sort((a, b) => {
+    const severityDelta = getSeverityScore(b.crash) - getSeverityScore(a.crash);
+    return severityDelta || a.forwardMetres - b.forwardMetres;
+  });
+};
+
 export const getDashboardLookaheadRisk = (
   index: CrashSpatialIndex | null,
   location: DriveLocation | null,
@@ -279,6 +343,7 @@ export const getDashboardLookaheadRisk = (
   corridorWidthMetres = 80,
   currentConditions: CurrentDrivingConditions | null = null,
   weatherMode: WeatherMatchMode = "weighted",
+  historicalWeatherMatches: Record<string, HistoricalWeatherMatch> = {},
 ): DashboardLookaheadRisk | null => {
   if (!index || !location) return null;
 
@@ -328,6 +393,7 @@ export const getDashboardLookaheadRisk = (
     }
 
     const conditionMatch = getCrashConditionMatch(result.crash, currentConditions);
+    const historicalMatch = historicalWeatherMatches[result.crash.id];
     if (effectiveWeatherMode === "strict" && !conditionMatch.isMatch) continue;
     if (
       effectiveWeatherMode === "similar" &&
@@ -350,16 +416,21 @@ export const getDashboardLookaheadRisk = (
     else if (isSerious) seriousCount += 1;
     else propertyDamageCount += 1;
 
-    if (conditionMatch.hasConditionData) conditionDataCount += 1;
-    if (conditionMatch.surface === "wet") wetCrashCount += 1;
-    if (conditionMatch.light === "dark") darkCrashCount += 1;
-    if (conditionMatch.isMatch) {
+    if (conditionMatch.hasConditionData || historicalMatch) conditionDataCount += 1;
+    if (conditionMatch.surface === "wet" || historicalMatch?.wetMatch) wetCrashCount += 1;
+    if (conditionMatch.light === "dark" || historicalMatch?.lightMatch) darkCrashCount += 1;
+    if (conditionMatch.isMatch || historicalMatch?.weatherMatch || historicalMatch?.lightMatch) {
       matchedCrashCount += 1;
       if (isFatal) matchedFatalCount += 1;
       else if (isSerious) matchedSeriousCount += 1;
     }
 
-    conditionMatchScore += effectiveWeatherMode === "weighted" ? conditionMatch.weight : 1;
+    const baseScore = getSeverityScore(result.crash);
+    const historicalMultiplier = historicalMatch?.scoreMultiplier ?? 1;
+    conditionMatchScore +=
+      effectiveWeatherMode === "weighted"
+        ? baseScore * conditionMatch.weight * historicalMultiplier
+        : baseScore * historicalMultiplier;
   }
 
   const classification = classifyLookaheadRisk(

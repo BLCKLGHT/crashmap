@@ -15,15 +15,20 @@ import {
 } from "./data/crashData";
 import {
   filterCrashesByCurrentConditions,
-  filterCrashesByWeatherPreset,
 } from "./data/conditionMatching";
 import { defaultFilters, filterCrashes } from "./data/filterCrashes";
 import {
   createCrashSpatialIndex,
+  getDashboardLookaheadCrashes,
   getDashboardLookaheadRisk,
   getDriveRiskSummary,
 } from "./data/spatialIndex";
-import { fetchCurrentWeather, getCurrentDrivingConditions } from "./data/weather";
+import {
+  compareHistoricalWeatherToCurrent,
+  fetchCurrentWeather,
+  getCurrentDrivingConditions,
+  getHistoricalWeatherForCrash,
+} from "./data/weather";
 import { useVoiceWarnings } from "./hooks/useVoiceWarnings";
 import type {
   CrashDataState,
@@ -31,6 +36,7 @@ import type {
   CrashRecord,
   CurrentDrivingConditions,
   DriveLocation,
+  HistoricalWeatherMatchState,
   TimelineState,
   WeatherMatchMode,
   WeatherState,
@@ -47,7 +53,15 @@ type DeviceOrientationEventConstructorWithPermission = typeof DeviceOrientationE
 };
 
 type AppViewMode = "map" | "dashboard";
-type WeatherSimulationMode = "live" | "wet" | "dry" | "daylight" | "dark" | "failure";
+type WeatherSimulationMode =
+  | "live"
+  | "wet"
+  | "dry"
+  | "daylight"
+  | "dark"
+  | "failure"
+  | "historyFailure"
+  | "historySlow";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const crashTimeCache = new WeakMap<CrashRecord, number | null>();
@@ -62,6 +76,9 @@ const SIMULATION_STEP_MS = 250;
 const SIMULATION_BASE_SPEED_MPS = 13.9;
 const WEATHER_REFRESH_MS = 10 * 60 * 1000;
 const WEATHER_MOVE_REFRESH_METRES = 10000;
+const HISTORICAL_WEATHER_REFRESH_MS = 30000;
+const HISTORICAL_WEATHER_MOVE_METRES = 100;
+const HISTORICAL_WEATHER_LOOKAHEAD_LIMIT = 20;
 const VOICE_REACTION_TIME_SECONDS = 1.5;
 const VOICE_CAR_LENGTH_METRES = 5;
 
@@ -267,10 +284,13 @@ const getSimulatedDrivingConditions = (
 ): CurrentDrivingConditions | null => {
   if (mode === "live") return baseConditions;
   if (mode === "failure") return null;
+  if (mode === "historyFailure" || mode === "historySlow") return baseConditions;
 
   const base: CurrentDrivingConditions = baseConditions ?? {
     surfaceCondition: "dry",
     lightCondition: "daylight",
+    visibilityCondition: "clear",
+    windCondition: "normal",
     isRaining: false,
     weatherLabel: "simulated conditions",
   };
@@ -332,6 +352,13 @@ function App() {
     conditions: null,
     status: "idle",
   });
+  const [historicalWeatherMatchState, setHistoricalWeatherMatchState] =
+    useState<HistoricalWeatherMatchState>({
+      status: "off",
+      matches: {},
+      matchedCrashIds: [],
+      checkedCrashCount: 0,
+    });
   const [weatherSimulationMode, setWeatherSimulationMode] =
     useState<WeatherSimulationMode>("live");
   const hasStartedInitialLoad = useRef(false);
@@ -345,6 +372,13 @@ function App() {
   const lastGpsUpdateRef = useRef(0);
   const compassHeadingRef = useRef<number | null>(null);
   const lastCompassUpdateRef = useRef(0);
+  const historicalWeatherLastRunRef = useRef<{
+    time: number;
+    latitude: number;
+    longitude: number;
+    heading?: number;
+    crashKey: string;
+  } | null>(null);
 
   const loadCrashData = async ({ refresh = false } = {}) => {
     setError(null);
@@ -466,13 +500,15 @@ function App() {
   );
 
   const weatherFilteredCrashes = useMemo(() => {
-    if (filters.weatherMode === "wet" || filters.weatherMode === "dry" || filters.weatherMode === "dark") {
-      return filterCrashesByWeatherPreset(attributeFilteredCrashes, filters.weatherMode);
+    if (filters.weatherMode === "current") {
+      return filterCrashesByCurrentConditions(
+        attributeFilteredCrashes,
+        activeDrivingConditions,
+        "similar",
+      );
     }
 
-    if (filters.weatherMode === "weighted") return attributeFilteredCrashes;
-
-    return filterCrashesByCurrentConditions(attributeFilteredCrashes, activeDrivingConditions, "all");
+    return attributeFilteredCrashes;
   }, [activeDrivingConditions, attributeFilteredCrashes, filters.weatherMode]);
 
   const filteredCrashes = useMemo(() => {
@@ -493,6 +529,17 @@ function App() {
   const crashSpatialIndex = useMemo(
     () => createCrashSpatialIndex(filteredCrashes),
     [filteredCrashes],
+  );
+
+  const dashboardLookaheadCrashes = useMemo(
+    () =>
+      getDashboardLookaheadCrashes(
+        crashSpatialIndex,
+        isDriveModeActive ? driveLocation : null,
+        500,
+        80,
+      ),
+    [crashSpatialIndex, driveLocation, isDriveModeActive],
   );
 
   const displayTime = useMemo(() => {
@@ -710,6 +757,145 @@ function App() {
   ]);
 
   useEffect(() => {
+    if (
+      !isDriveModeActive ||
+      filters.weatherMode !== "historical" ||
+      !driveLocation ||
+      !activeDrivingConditions
+    ) {
+      setHistoricalWeatherMatchState((current) =>
+        current.status === "off"
+          ? current
+          : { status: "off", matches: {}, matchedCrashIds: [], checkedCrashCount: 0 },
+      );
+      return;
+    }
+
+    const topLookaheadCrashes = dashboardLookaheadCrashes
+      .filter((item) => item.crash.dateTime)
+      .slice(0, HISTORICAL_WEATHER_LOOKAHEAD_LIMIT);
+    const crashKey = topLookaheadCrashes.map((item) => item.crash.id).join("|");
+    const now = Date.now();
+    const lastRun = historicalWeatherLastRunRef.current;
+    const movedMetres = lastRun
+      ? getDistanceMetres(
+          driveLocation.latitude,
+          driveLocation.longitude,
+          lastRun.latitude,
+          lastRun.longitude,
+        )
+      : Infinity;
+    const headingDelta =
+      typeof driveLocation.heading === "number" && typeof lastRun?.heading === "number"
+        ? Math.abs(((((driveLocation.heading - lastRun.heading) % 360) + 540) % 360) - 180)
+        : Infinity;
+
+    if (
+      lastRun &&
+      crashKey === lastRun.crashKey &&
+      movedMetres < HISTORICAL_WEATHER_MOVE_METRES &&
+      headingDelta < 18 &&
+      now - lastRun.time < HISTORICAL_WEATHER_REFRESH_MS
+    ) {
+      return;
+    }
+
+    if (!topLookaheadCrashes.length) {
+      setHistoricalWeatherMatchState({
+        status: "idle",
+        matches: {},
+        matchedCrashIds: [],
+        checkedCrashCount: 0,
+      });
+      return;
+    }
+
+    historicalWeatherLastRunRef.current = {
+      time: now,
+      latitude: driveLocation.latitude,
+      longitude: driveLocation.longitude,
+      heading: driveLocation.heading,
+      crashKey,
+    };
+
+    let isCancelled = false;
+    setHistoricalWeatherMatchState((current) => ({
+      ...current,
+      status: "checking",
+      error: undefined,
+      checkedCrashCount: topLookaheadCrashes.length,
+    }));
+
+    const runLookup = async () => {
+      if (weatherSimulationMode === "historySlow") {
+        await new Promise((resolve) => window.setTimeout(resolve, 1800));
+      }
+      if (weatherSimulationMode === "historyFailure") {
+        throw new Error("Simulated historical weather failure");
+      }
+
+      const entries = await Promise.all(
+        topLookaheadCrashes.map(async ({ crash }) => {
+          const weather = await getHistoricalWeatherForCrash(crash);
+          if (!weather) return null;
+          return [
+            crash.id,
+            compareHistoricalWeatherToCurrent(weather, activeDrivingConditions),
+          ] as const;
+        }),
+      );
+
+      return Object.fromEntries(entries.filter(Boolean) as Array<[string, NonNullable<(typeof entries)[number]>[1]]>);
+    };
+
+    void runLookup()
+      .then((matches) => {
+        if (isCancelled) return;
+        const matchedCrashIds = Object.values(matches)
+          .filter(
+            (match) =>
+              match.weatherMatch ||
+              match.wetMatch ||
+              match.lightMatch ||
+              match.visibilityMatch ||
+              match.windMatch,
+          )
+          .map((match) => match.crashId);
+
+        setHistoricalWeatherMatchState({
+          status: matchedCrashIds.length ? "ready" : "limited",
+          matches,
+          matchedCrashIds,
+          checkedCrashCount: topLookaheadCrashes.length,
+        });
+      })
+      .catch((caughtError) => {
+        if (isCancelled) return;
+        setHistoricalWeatherMatchState({
+          status: "error",
+          matches: {},
+          matchedCrashIds: [],
+          checkedCrashCount: topLookaheadCrashes.length,
+          error:
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Historical weather unavailable",
+        });
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    activeDrivingConditions,
+    dashboardLookaheadCrashes,
+    driveLocation,
+    filters.weatherMode,
+    isDriveModeActive,
+    weatherSimulationMode,
+  ]);
+
+  useEffect(() => {
     if (!isSimulationMode || !isSimulationDriving) {
       if (simulationIntervalRef.current !== null) {
         window.clearInterval(simulationIntervalRef.current);
@@ -845,7 +1031,7 @@ function App() {
     [crashSpatialIndex, driveLocation, isDriveModeActive],
   );
 
-  const dashboardWeatherMode: WeatherMatchMode = filters.weatherMode === "weighted" ? "weighted" : "all";
+  const dashboardWeatherMode: WeatherMatchMode = filters.weatherMode === "current" ? "weighted" : "all";
 
   const dashboardLookaheadRisk = useMemo(
     () =>
@@ -856,12 +1042,15 @@ function App() {
         80,
         activeDrivingConditions,
         dashboardWeatherMode,
+        filters.weatherMode === "historical" ? historicalWeatherMatchState.matches : {},
       ),
     [
       activeDrivingConditions,
       crashSpatialIndex,
       dashboardWeatherMode,
       driveLocation,
+      filters.weatherMode,
+      historicalWeatherMatchState.matches,
       isDriveModeActive,
     ],
   );
@@ -962,6 +1151,14 @@ function App() {
   const fatalProximityStyle = {
     "--fatal-glow-strength": fatalProximityIntensity.toFixed(3),
   } as CSSProperties;
+  const weatherMatchStatus =
+    filters.weatherMode === "off"
+      ? "off"
+      : filters.weatherMode === "current"
+        ? activeDrivingConditions
+          ? "ready"
+          : "limited"
+        : historicalWeatherMatchState.status;
   const voiceContext = useMemo<VoiceWarningContext>(
     () => ({
       isActive: isDriveModeActive,
@@ -1007,6 +1204,7 @@ function App() {
           heatmapCrashes={filteredCrashes}
           currentConditions={activeDrivingConditions}
           weatherMode={filters.weatherMode}
+          weatherMatchedCrashIds={historicalWeatherMatchState.matchedCrashIds}
           timePhase={timePhase}
           isFullscreen={isChromeHidden}
           driveMode={{
@@ -1039,6 +1237,7 @@ function App() {
           weatherStatus={
             weatherSimulationMode === "failure" ? "error" : weatherSimulationMode === "live" ? weatherState.status : "simulated"
           }
+          weatherMatchStatus={weatherMatchStatus}
           error={driveError}
           onStartDrive={startDriveMode}
           onStartSimulation={startSimulationMode}

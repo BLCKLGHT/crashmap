@@ -10,7 +10,15 @@ import type {
 import { defaultFilters, uniqueOptions } from "../data/filterCrashes";
 import { Legend } from "./Legend";
 
-type WeatherSimulationMode = "live" | "wet" | "dry" | "daylight" | "dark" | "failure";
+type WeatherSimulationMode =
+  | "live"
+  | "wet"
+  | "dry"
+  | "daylight"
+  | "dark"
+  | "failure"
+  | "historyFailure"
+  | "historySlow";
 
 type FilterPanelProps = {
   crashes: CrashRecord[];
@@ -301,42 +309,28 @@ export function FilterPanel({
         )}
 
         <div className="filter-group">
-          <span className="filter-label">Weather-matched crash history</span>
+          <span className="filter-label">Weather matching</span>
           <div className="segmented-control" role="group" aria-label="Weather history filter">
             <button
-              className={filters.weatherMode === "all" ? "is-active" : ""}
+              className={filters.weatherMode === "off" ? "is-active" : ""}
               type="button"
-              onClick={() => setFilter("weatherMode", "all")}
+              onClick={() => setFilter("weatherMode", "off")}
             >
-              All
+              Off
             </button>
             <button
-              className={filters.weatherMode === "weighted" ? "is-active" : ""}
+              className={filters.weatherMode === "current" ? "is-active" : ""}
               type="button"
-              onClick={() => setFilter("weatherMode", "weighted")}
+              onClick={() => setFilter("weatherMode", "current")}
             >
-              Similar now
+              Current
             </button>
             <button
-              className={filters.weatherMode === "wet" ? "is-active" : ""}
+              className={filters.weatherMode === "historical" ? "is-active" : ""}
               type="button"
-              onClick={() => setFilter("weatherMode", "wet")}
+              onClick={() => setFilter("weatherMode", "historical")}
             >
-              Wet
-            </button>
-            <button
-              className={filters.weatherMode === "dry" ? "is-active" : ""}
-              type="button"
-              onClick={() => setFilter("weatherMode", "dry")}
-            >
-              Dry
-            </button>
-            <button
-              className={filters.weatherMode === "dark" ? "is-active" : ""}
-              type="button"
-              onClick={() => setFilter("weatherMode", "dark")}
-            >
-              Night
+              Historical beta
             </button>
           </div>
           <p className="filter-note">
@@ -359,6 +353,8 @@ export function FilterPanel({
             <option value="daylight">Simulate daylight</option>
             <option value="dark">Simulate night</option>
             <option value="failure">Simulate weather failure</option>
+            <option value="historyFailure">Simulate archive failure</option>
+            <option value="historySlow">Simulate slow archive</option>
           </select>
         </label>
 

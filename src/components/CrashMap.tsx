@@ -7,7 +7,7 @@ import type {
   CrashRecord,
   CurrentDrivingConditions,
   DriveLocation,
-  WeatherMapFilterMode,
+  WeatherMatchSetting,
 } from "../types/crash";
 import { getCrashConditionMatch } from "../data/conditionMatching";
 import { isFatalCrash, isSeriousCrash } from "../data/filterCrashes";
@@ -16,7 +16,8 @@ type CrashMapProps = {
   crashes: CrashRecord[];
   heatmapCrashes?: CrashRecord[];
   currentConditions?: CurrentDrivingConditions | null;
-  weatherMode?: WeatherMapFilterMode;
+  weatherMode?: WeatherMatchSetting;
+  weatherMatchedCrashIds?: string[];
   timePhase: "day" | "dawn" | "dusk" | "night";
   isFullscreen?: boolean;
   driveMode?: {
@@ -127,9 +128,9 @@ const getHeatWeight = (crash: CrashRecord): number => {
 const getConditionWeight = (
   crash: CrashRecord,
   currentConditions?: CurrentDrivingConditions | null,
-  weatherMode?: WeatherMapFilterMode,
+  weatherMode?: WeatherMatchSetting,
 ): number => {
-  if (weatherMode !== "weighted" || !currentConditions) return 1;
+  if (weatherMode !== "current" || !currentConditions) return 1;
   return getCrashConditionMatch(crash, currentConditions).weight;
 };
 
@@ -177,7 +178,7 @@ const popupHtml = (crash: CrashRecord): string => `
 const toFeature = (
   crash: CrashRecord,
   currentConditions?: CurrentDrivingConditions | null,
-  weatherMode?: WeatherMapFilterMode,
+  weatherMode?: WeatherMatchSetting,
 ): CrashFeature => {
   const severity = getSeverityClass(crash);
   const conditionWeight = getConditionWeight(crash, currentConditions, weatherMode);
@@ -344,6 +345,7 @@ export function CrashMap({
   heatmapCrashes,
   currentConditions,
   weatherMode,
+  weatherMatchedCrashIds = [],
   timePhase,
   isFullscreen = false,
   driveMode,
@@ -373,6 +375,10 @@ export function CrashMap({
   const [driveCloudItems, setDriveCloudItems] = useState<RenderCrash[]>([]);
   const [areaCrashCount, setAreaCrashCount] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
+  const weatherMatchedCrashIdSet = useMemo(
+    () => new Set(weatherMatchedCrashIds),
+    [weatherMatchedCrashIds],
+  );
 
   const heatPoints = useMemo(() => {
     if (driveMode?.isActive) return [];
@@ -551,6 +557,7 @@ export function CrashMap({
         }
 
         const severity = getSeverityClass(item.crash);
+        const isWeatherMatched = weatherMatchedCrashIdSet.has(item.crash.id);
         const isFatal = severity === "fatal";
         const isSerious = severity === "serious";
         const radius = driveMode?.isActive
@@ -626,6 +633,14 @@ export function CrashMap({
           context.fill();
         }
 
+        if (driveMode?.isActive && isWeatherMatched) {
+          context.beginPath();
+          context.arc(x, y, radius + 7, 0, Math.PI * 2);
+          context.lineWidth = 2.4;
+          context.strokeStyle = "rgba(56, 189, 248, 0.9)";
+          context.stroke();
+        }
+
         nextClickableItems.push({
           ...item,
           x,
@@ -636,7 +651,7 @@ export function CrashMap({
 
       canvasItemsRef.current = nextClickableItems;
     });
-  }, [driveCloudItems, driveMode?.isActive, renderItems, timePhase]);
+  }, [driveCloudItems, driveMode?.isActive, renderItems, timePhase, weatherMatchedCrashIdSet]);
 
   const drawLocationCanvas = useCallback(() => {
     const map = mapRef.current;
