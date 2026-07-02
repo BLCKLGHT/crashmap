@@ -91,9 +91,9 @@ const getSpeedKmhNumber = (speedMetresPerSecond?: number): number => {
 
 const getRoadFlowDurationSeconds = (speedMetresPerSecond?: number): number => {
   const speedKmh = getSpeedKmhNumber(speedMetresPerSecond);
-  if (speedKmh <= 1) return 7.8;
-  if (speedKmh >= 110) return 1.15;
-  return 7.8 - (speedKmh / 110) * 6.65;
+  if (speedKmh <= 1) return 11;
+  if (speedKmh >= 110) return 1.8;
+  return 11 - (speedKmh / 110) * 9.2;
 };
 
 const getRoadFlowIntensity = (speedMetresPerSecond?: number): number => {

@@ -549,34 +549,30 @@ button:disabled {
 
 .dashboard-road-motion {
   position: absolute;
-  inset: -44% -28% -46%;
+  inset: 30% -28% -34%;
   z-index: 1;
   overflow: hidden;
   opacity: var(--road-flow-opacity);
   pointer-events: none;
+  clip-path: polygon(38% 0, 62% 0, 118% 100%, -18% 100%);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent 18% 82%, rgba(255, 255, 255, 0.1)),
+    linear-gradient(180deg, #263238 0%, #12191c 62%, #0a1012 100%);
 }
 
 .dashboard-road-motion::before {
   position: absolute;
-  inset: -72% -8% -24%;
+  inset: -28% 0 -8%;
   content: "";
   background:
-    linear-gradient(
-      180deg,
-      rgba(30, 41, 45, 0.95) 0%,
-      rgba(12, 18, 20, 0.98) 100%
-    ),
     repeating-linear-gradient(
       180deg,
-      transparent 0 44px,
-      rgba(255, 255, 255, 0.22) 45px 50px,
-      transparent 51px 112px
+      transparent 0 36px,
+      rgba(255, 255, 255, 0.22) 37px 42px,
+      transparent 43px 96px
     ),
-    linear-gradient(90deg, transparent 8%, rgba(255, 255, 255, 0.2) 50%, transparent 92%),
-    linear-gradient(90deg, transparent 0 16%, rgba(0, 0, 0, 0.24) 48% 52%, transparent 84%);
+    linear-gradient(90deg, transparent 9%, rgba(255, 255, 255, 0.22) 50%, transparent 91%);
   filter: blur(0.15px);
-  transform: translateY(-34px) perspective(7rem) rotateX(56deg) scale(2.2, 2.38);
-  transform-origin: bottom;
   animation: dashboard-road-stream var(--road-flow-duration) linear infinite;
   will-change: background-position;
 }
@@ -593,9 +589,9 @@ button:disabled {
 
 .dashboard-road-motion span {
   position: absolute;
-  top: -76%;
-  bottom: -42%;
-  width: 6px;
+  top: -20%;
+  bottom: -8%;
+  width: 5px;
   border-radius: 999px;
   background: repeating-linear-gradient(
     180deg,
@@ -610,19 +606,18 @@ button:disabled {
 }
 
 .dashboard-road-motion span:nth-child(1) {
-  left: 18%;
-  transform: translateY(-32px) perspective(7rem) rotateX(56deg) rotateZ(9deg) scale(1.55, 2.45);
+  left: 31%;
+  transform: skewX(-10deg);
 }
 
 .dashboard-road-motion span:nth-child(2) {
   left: 50%;
-  transform: translateY(-32px) perspective(7rem) rotateX(56deg) scale(1.52, 2.45);
   animation-delay: calc(var(--road-flow-duration) * -0.22);
 }
 
 .dashboard-road-motion span:nth-child(3) {
-  right: 18%;
-  transform: translateY(-32px) perspective(7rem) rotateX(56deg) rotateZ(-9deg) scale(1.55, 2.45);
+  right: 31%;
+  transform: skewX(10deg);
   animation-delay: calc(var(--road-flow-duration) * -0.44);
 }
 
@@ -679,9 +674,7 @@ button:disabled {
 @keyframes dashboard-road-stream {
   100% {
     background-position:
-      0 0,
-      0 224px,
-      0 0,
+      0 192px,
       0 0;
   }
 }
