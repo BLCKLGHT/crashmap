@@ -7,7 +7,7 @@ const PAGE_BATCH_SIZE = 6;
 const DB_NAME = "tasmania-crash-map";
 const DB_VERSION = 1;
 const STORE_NAME = "crashData";
-const CACHE_KEY = "processed-crash-data:v1";
+const CACHE_KEY = "processed-crash-data:v2";
 
 type ArcGisFeature = {
   id?: string | number;
@@ -124,6 +124,9 @@ const fetchCrashPage = async (resultOffset: number): Promise<ArcGisFeature[]> =>
   }
 
   const data = (await response.json()) as ArcGisGeoJson;
+  if (!Array.isArray(data.features)) {
+    throw new Error("Crash data response did not include a feature collection.");
+  }
   return data.features ?? [];
 };
 
@@ -159,6 +162,10 @@ export async function fetchAllTasCrashData(
     resultOffset += PAGE_SIZE * PAGE_BATCH_SIZE;
   }
 
+  if (!records.length) {
+    throw new Error("Crash data request returned no usable crash records.");
+  }
+
   return records;
 }
 
@@ -167,7 +174,7 @@ export const readCachedCrashData = async (): Promise<CachedCrashPayload | null> 
     const parsed = await runStoreRequest<CachedCrashPayload | undefined>("readonly", (store) =>
       store.get(CACHE_KEY),
     );
-    if (!parsed || !Array.isArray(parsed.crashes)) return null;
+    if (!parsed || !Array.isArray(parsed.crashes) || parsed.crashes.length === 0) return null;
 
     return parsed;
   } catch {
@@ -178,6 +185,10 @@ export const readCachedCrashData = async (): Promise<CachedCrashPayload | null> 
 export const writeCachedCrashData = async (
   crashes: CrashRecord[],
 ): Promise<CachedCrashPayload> => {
+  if (!crashes.length) {
+    throw new Error("Refusing to cache an empty crash dataset.");
+  }
+
   const payload = {
     fetchedAt: new Date().toISOString(),
     crashes,
