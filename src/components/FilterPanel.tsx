@@ -98,7 +98,7 @@ const formatWeatherDetailLabel = (
 ): string => {
   if (!weather) {
     if (status === "simulated") return `simulated weather: ${conditions?.weatherLabel ?? "active"}`;
-    if (status === "loading") return "updating weather";
+    if (status === "loading" || status === "idle") return "";
     if (status === "error") return "weather unavailable, using estimated conditions";
     return "waiting for current weather";
   }
@@ -136,6 +136,11 @@ export function FilterPanel({
   const speedZones = uniqueOptions(crashes, (crash) => crash.speedZone);
   const lightConditions = uniqueOptions(crashes, (crash) => crash.lightCondition);
   const surfaceTypes = uniqueOptions(crashes, (crash) => crash.surfaceType);
+  const weatherDetailLabel = formatWeatherDetailLabel(
+    currentWeather,
+    currentConditions,
+    weatherStatus,
+  );
 
   const setFilter = <Key extends keyof CrashFilters>(
     key: Key,
@@ -367,8 +372,7 @@ export function FilterPanel({
           <p className="filter-note">
             Current condition: {formatConditionLabel(currentConditions, weatherStatus)}
             {weatherStatus === "loading" ? " · updating" : ""}
-            {" · "}
-            {formatWeatherDetailLabel(currentWeather, currentConditions, weatherStatus)}
+            {weatherDetailLabel ? ` · ${weatherDetailLabel}` : ""}
           </p>
         </div>
 

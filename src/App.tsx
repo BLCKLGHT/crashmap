@@ -697,12 +697,10 @@ function App() {
       return;
     }
 
-    let isCancelled = false;
     setWeatherState((current) => ({ ...current, status: "loading", error: undefined }));
 
     void fetchCurrentWeather(driveLocation.latitude, driveLocation.longitude)
       .then((weather) => {
-        if (isCancelled) return;
         setWeatherState({
           weather,
           conditions: getCurrentDrivingConditions(weather, new Date()),
@@ -713,7 +711,6 @@ function App() {
         });
       })
       .catch((caughtError) => {
-        if (isCancelled) return;
         setWeatherState({
           weather: null,
           conditions: getCurrentDrivingConditions(null, new Date()),
@@ -727,10 +724,6 @@ function App() {
               : "Weather unavailable",
         });
       });
-
-    return () => {
-      isCancelled = true;
-    };
   }, [
     driveLocation,
     isDriveModeActive,

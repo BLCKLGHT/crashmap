@@ -141,7 +141,7 @@ const getWeatherDetailLabel = (
 ): string => {
   if (!weather) {
     if (status === "simulated") return `Simulated weather: ${conditions?.weatherLabel ?? "active"}`;
-    if (status === "loading") return "Weather: updating";
+    if (status === "loading" || status === "idle") return "";
     if (status === "error") return "Weather unavailable, using time-of-day estimate";
     return "Weather: waiting for location";
   }
@@ -295,7 +295,7 @@ export function DashboardMode({
         <strong>{distanceLabel}</strong>
         <p className="dashboard-history__condition">{weatherMatchLabel}</p>
         <p className="dashboard-history__condition">Current condition: {conditionLabel}</p>
-        <p className="dashboard-history__condition">{weatherDetailLabel}</p>
+        {weatherDetailLabel && <p className="dashboard-history__condition">{weatherDetailLabel}</p>}
         <h2>{historyHeadline}</h2>
         <div className="dashboard-history__stats">
           <div>
