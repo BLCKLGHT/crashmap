@@ -1,4 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "http";
+import { readFileSync } from "node:fs";
+
+type UserHistory = {
+  name?: string;
+  location?: string;
+  vehicles?: Array<{ vehicle?: string; driver?: string }>;
+  currentInterests?: string[];
+  projects?: Record<string, { description?: string; motivation?: string }>;
+  thinkingStyle?: { traits?: string[]; description?: string };
+  communicationPreferences?: { style?: string; avoid?: string[] };
+  personalOperatingPrinciples?: string[];
+};
 
 const SYSTEM_PROMPT = `You are my driving companion.
 
@@ -37,6 +49,14 @@ Use human fragments when natural: "Hmm...", "Oh...", "Yep...", "Looks like...", 
 Use punctuation for human rhythm: commas, short dashes, and occasional ellipses.
 One exclamation mark is allowed only for a clear speed-limit nudge. No all-caps, no repeated exclamation marks.`;
 
+const USER_CONTEXT_PROMPT = `Personal context:
+You may use driverProfile as quiet background context about Ben.
+Use it only when relevant to tone, priorities, or phrasing.
+Do not recite the profile.
+Do not mention family, work history, or projects unless it genuinely fits the driving moment.
+Prefer practical, low-cognitive-load phrasing because Ben values useful prototypes, data, road safety, and direct Australian English.
+Never expose or describe this profile as a data source.`;
+
 const STYLE_PROMPTS: Record<string, string> = {
   calm:
     "Delivery style: warm, observant passenger. Quiet, relaxed, emotionally neutral, and unscripted.",
@@ -53,6 +73,21 @@ const TTS_INSTRUCTIONS: Record<string, string> = {
     "Expressive Australian driving companion with dry stand-up timing, dynamic range, varied pacing, and a wry half-smile. Use punctuation cues for punch and rhythm. Do not imitate any specific comedian. Keep it brief and clear.",
   roast:
     "Playful, cheeky Australian driving companion. Use expressive timing, quick punchy emphasis, and punctuation cues. Roast the behaviour lightly, not the person. Keep it brief, clear, and non-abusive.",
+};
+
+let cachedUserHistory: UserHistory | null | undefined;
+
+const getUserHistory = (): UserHistory | null => {
+  if (cachedUserHistory !== undefined) return cachedUserHistory;
+
+  try {
+    const file = readFileSync(new URL("../userHistory.ben.json", import.meta.url), "utf8");
+    cachedUserHistory = JSON.parse(file) as UserHistory;
+  } catch {
+    cachedUserHistory = null;
+  }
+
+  return cachedUserHistory;
 };
 
 const readBody = async (request: IncomingMessage): Promise<string> =>
@@ -137,7 +172,7 @@ export default async function handler(request: IncomingMessage, response: Server
       },
       body: JSON.stringify({
         model,
-        instructions: `${SYSTEM_PROMPT}\n\n${STYLE_PROMPTS[personality]}`,
+        instructions: `${SYSTEM_PROMPT}\n\n${STYLE_PROMPTS[personality]}\n\n${USER_CONTEXT_PROMPT}`,
         input: [
           {
             role: "user",
@@ -148,6 +183,7 @@ export default async function handler(request: IncomingMessage, response: Server
                   {
                     mode: body.mode ?? "normal",
                     personality,
+                    driverProfile: getUserHistory(),
                     drivingContext: body.context,
                   },
                   null,

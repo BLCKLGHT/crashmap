@@ -1,0 +1,98 @@
+{
+  "name": "Ben Hayes",
+  "location": "Hawley Beach, Tasmania, Australia",
+  "family": {
+    "partner": "Kyla",
+    "children": ["Teo", "Summer"]
+  },
+  "vehicles": [
+    {
+      "vehicle": "Jeep Grand Cherokee Laredo",
+      "approxYear": "2015/2016",
+      "fuel": "petrol",
+      "driveType": "rear-wheel drive"
+    },
+    {
+      "vehicle": "Hyundai Tucson Highlander",
+      "approxYear": "2021",
+      "fuel": "diesel",
+      "driver": "Kyla"
+    }
+  ],
+  "background": {
+    "summary": "Ben has a broad background across design, video, data analysis, automation, teaching, ecommerce and industrial laboratory work.",
+    "workHistory": [
+      "Videography and editing",
+      "IGA commercial video work",
+      "Guitar strings ecommerce",
+      "Comcare Data and Intelligence Analyst",
+      "Comcare BI Reporting Officer",
+      "St.Lukes PHI Analyst",
+      "Design teacher at TasTAFE, UTAS and Foundry",
+      "Bell Bay Aluminium laboratory analyst"
+    ]
+  },
+  "currentInterests": [
+    "AI",
+    "automation",
+    "data analysis",
+    "dashboards",
+    "road safety",
+    "public data",
+    "software prototypes",
+    "business tools",
+    "design systems",
+    "personal finance optimisation",
+    "cash-flow management",
+    "creative technology"
+  ],
+  "projects": {
+    "tasmaniaCrashMap": {
+      "description": "A personal road-awareness app using Tasmanian crash data, GPS, weather, dashboard visuals and AI voice to make an older car smarter.",
+      "motivation": "Ben wants to increase his own safety and defensibility on the road using ubiquitous data and technology."
+    },
+    "sideHustleStudio": {
+      "description": "Automation and AI consultancy work for small businesses."
+    },
+    "analytica": {
+      "description": "Civic data project that turns large council agendas into clearer public updates."
+    },
+    "ghostPro": {
+      "description": "Resume and cover letter generation system using AI."
+    },
+    "beyondObsolete": {
+      "description": "Podcast and prototype-based exploration of AI, media, technology and society."
+    }
+  },
+  "thinkingStyle": {
+    "traits": [
+      "analytical",
+      "practical",
+      "systems-oriented",
+      "curious",
+      "first-principles driven",
+      "experimental",
+      "self-directed"
+    ],
+    "description": "Ben often explores how systems work underneath the surface. He prefers building practical tools that solve real problems in his own life before trying to predict what a wider market wants."
+  },
+  "communicationPreferences": {
+    "language": "Australian English",
+    "style": "direct, useful, contextual and not overly polished",
+    "avoid": [
+      "em dashes",
+      "corporate language",
+      "generic motivational phrasing",
+      "overly robotic wording",
+      "unnecessary enthusiasm"
+    ]
+  },
+  "personalOperatingPrinciples": [
+    "Build what is useful in real life.",
+    "Reduce cognitive load.",
+    "Use data to make better decisions.",
+    "Prefer practical prototypes over abstract ideas.",
+    "Avoid building features just because they are popular.",
+    "Start with personal need, then expand only if the tool proves useful."
+  ]
+}

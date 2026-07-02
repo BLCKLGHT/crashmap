@@ -1,5 +1,17 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
+
+type UserHistory = {
+  name?: string;
+  location?: string;
+  vehicles?: Array<{ vehicle?: string; driver?: string }>;
+  currentInterests?: string[];
+  projects?: Record<string, { description?: string; motivation?: string }>;
+  thinkingStyle?: { traits?: string[]; description?: string };
+  communicationPreferences?: { style?: string; avoid?: string[] };
+  personalOperatingPrinciples?: string[];
+};
 
 const SYSTEM_PROMPT = `You are my driving companion.
 
@@ -37,6 +49,14 @@ Keep spoken responses short: usually 4 to 14 words, maximum 20.
 Use human fragments when natural: "Hmm...", "Oh...", "Yep...", "Looks like...", "I'd probably...", "Let's just...", "It might be worth..."
 Use punctuation for human rhythm: commas, short dashes, and occasional ellipses.
 One exclamation mark is allowed only for a clear speed-limit nudge. No all-caps, no repeated exclamation marks.`;
+
+const USER_CONTEXT_PROMPT = `Personal context:
+You may use driverProfile as quiet background context about Ben.
+Use it only when relevant to tone, priorities, or phrasing.
+Do not recite the profile.
+Do not mention family, work history, or projects unless it genuinely fits the driving moment.
+Prefer practical, low-cognitive-load phrasing because Ben values useful prototypes, data, road safety, and direct Australian English.
+Never expose or describe this profile as a data source.`;
 
 const STYLE_PROMPTS: Record<string, string> = {
   calm:
@@ -87,6 +107,21 @@ const getResponseText = (response: Record<string, unknown>): string => {
 };
 
 const toBase64 = (buffer: ArrayBuffer): string => Buffer.from(buffer).toString("base64");
+
+let cachedUserHistory: UserHistory | null | undefined;
+
+const getUserHistory = (): UserHistory | null => {
+  if (cachedUserHistory !== undefined) return cachedUserHistory;
+
+  try {
+    const file = readFileSync(new URL("./userHistory.ben.json", import.meta.url), "utf8");
+    cachedUserHistory = JSON.parse(file) as UserHistory;
+  } catch {
+    cachedUserHistory = null;
+  }
+
+  return cachedUserHistory;
+};
 
 export default defineConfig({
   plugins: [
@@ -144,7 +179,7 @@ export default defineConfig({
               },
               body: JSON.stringify({
                 model,
-                instructions: `${SYSTEM_PROMPT}\n\n${STYLE_PROMPTS[personality]}`,
+                instructions: `${SYSTEM_PROMPT}\n\n${STYLE_PROMPTS[personality]}\n\n${USER_CONTEXT_PROMPT}`,
                 input: [
                   {
                     role: "user",
@@ -155,6 +190,7 @@ export default defineConfig({
                           {
                             mode: body.mode ?? "normal",
                             personality,
+                            driverProfile: getUserHistory(),
                             drivingContext: body.context,
                           },
                           null,
