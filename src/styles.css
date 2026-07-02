@@ -525,18 +525,18 @@ button:disabled {
 
 .dashboard-road-motion::before {
   position: absolute;
-  inset: -48% 16% -18%;
+  inset: -112% -8% -28%;
   content: "";
   background:
     repeating-linear-gradient(
       180deg,
-      transparent 0 22px,
-      rgba(255, 255, 255, 0.18) 23px 25px,
-      transparent 26px 58px
+      transparent 0 34px,
+      rgba(255, 255, 255, 0.22) 35px 39px,
+      transparent 40px 88px
     ),
-    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+    linear-gradient(90deg, transparent 12%, rgba(255, 255, 255, 0.16) 50%, transparent 88%);
   filter: blur(0.15px);
-  transform: perspective(10rem) rotateX(62deg);
+  transform: perspective(8rem) rotateX(58deg) scale(1.55, 1.62);
   transform-origin: bottom;
   animation: dashboard-road-stream var(--road-flow-duration) linear infinite;
   will-change: background-position;
@@ -547,23 +547,23 @@ button:disabled {
   inset: 0;
   content: "";
   background:
-    radial-gradient(ellipse at 50% 18%, rgba(255, 255, 255, 0.12), transparent 42%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 34%),
+    radial-gradient(ellipse at 50% 4%, rgba(255, 255, 255, 0.18), transparent 48%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.13), transparent 58%),
     linear-gradient(0deg, rgba(0, 0, 0, 0.32), transparent 46%);
 }
 
 .dashboard-road-motion span {
   position: absolute;
-  top: -36%;
-  bottom: -18%;
-  width: 3px;
+  top: -96%;
+  bottom: -26%;
+  width: 5px;
   border-radius: 999px;
   background: repeating-linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.72) 0 18px,
-    transparent 18px 46px
+    rgba(255, 255, 255, 0.78) 0 34px,
+    transparent 34px 76px
   );
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.26);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.3);
   opacity: var(--road-lane-opacity);
   transform-origin: bottom;
   animation: dashboard-lane-flow var(--road-flow-duration) linear infinite;
@@ -571,19 +571,19 @@ button:disabled {
 }
 
 .dashboard-road-motion span:nth-child(1) {
-  left: 27%;
-  transform: perspective(8rem) rotateX(58deg) rotateZ(8deg) scaleY(1.25);
+  left: 20%;
+  transform: perspective(7rem) rotateX(57deg) rotateZ(9deg) scale(1.22, 1.85);
 }
 
 .dashboard-road-motion span:nth-child(2) {
   left: 50%;
-  transform: perspective(8rem) rotateX(58deg) scaleY(1.25);
+  transform: perspective(7rem) rotateX(57deg) scale(1.2, 1.85);
   animation-delay: calc(var(--road-flow-duration) * -0.22);
 }
 
 .dashboard-road-motion span:nth-child(3) {
-  right: 27%;
-  transform: perspective(8rem) rotateX(58deg) rotateZ(-8deg) scaleY(1.25);
+  right: 20%;
+  transform: perspective(7rem) rotateX(57deg) rotateZ(-9deg) scale(1.22, 1.85);
   animation-delay: calc(var(--road-flow-duration) * -0.44);
 }
 
@@ -603,13 +603,13 @@ button:disabled {
 
 @keyframes dashboard-road-stream {
   100% {
-    background-position: 0 58px, 0 0;
+    background-position: 0 176px, 0 0;
   }
 }
 
 @keyframes dashboard-lane-flow {
   100% {
-    background-position: 0 92px;
+    background-position: 0 228px;
   }
 }
 
