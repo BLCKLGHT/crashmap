@@ -91,9 +91,9 @@ const getSpeedKmhNumber = (speedMetresPerSecond?: number): number => {
 
 const getRoadFlowDurationSeconds = (speedMetresPerSecond?: number): number => {
   const speedKmh = getSpeedKmhNumber(speedMetresPerSecond);
-  if (speedKmh <= 1) return 9;
-  if (speedKmh >= 100) return 1.35;
-  return 9 - (speedKmh / 100) * 7.65;
+  if (speedKmh <= 1) return 7.8;
+  if (speedKmh >= 110) return 1.15;
+  return 7.8 - (speedKmh / 110) * 6.65;
 };
 
 const getRoadFlowIntensity = (speedMetresPerSecond?: number): number => {
@@ -235,6 +235,14 @@ export function DashboardMode({
     (typeof currentWeather?.rain === "number" && currentWeather.rain > 0) ||
     (typeof currentWeather?.showers === "number" && currentWeather.showers > 0);
   const isDarkRoad = currentConditions?.lightCondition === "dark";
+  const skyClass =
+    currentConditions?.lightCondition === "dark"
+      ? "dashboard-distance--sky-night"
+      : currentConditions?.lightCondition === "dawn_dusk"
+        ? "dashboard-distance--sky-dusk"
+        : isWetRoad || isRaining
+          ? "dashboard-distance--sky-rain"
+          : "dashboard-distance--sky-day";
 
   return (
     <section className={`dashboard-mode dashboard-mode--${risk}`}>
@@ -285,7 +293,7 @@ export function DashboardMode({
       </div>
 
       <div
-        className={`dashboard-distance ${isWetRoad ? "dashboard-distance--wet" : ""} ${
+        className={`dashboard-distance ${skyClass} ${isWetRoad ? "dashboard-distance--wet" : ""} ${
           isDarkRoad ? "dashboard-distance--dark" : ""
         } ${isRaining ? "dashboard-distance--rain" : ""}`}
         style={roadFlowStyle}

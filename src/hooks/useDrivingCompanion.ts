@@ -44,6 +44,12 @@ type CompanionResponse = {
   audioBase64?: string;
 };
 
+type NavigatorWithAudioSession = Navigator & {
+  audioSession?: {
+    type?: "auto" | "ambient" | "playback" | "transient" | "transient-solo" | "play-and-record";
+  };
+};
+
 const MIN_REQUEST_INTERVAL_MS = 20000;
 const MIN_HUMAN_DELAY_MS = 2000;
 const MAX_HUMAN_DELAY_MS = 6000;
@@ -85,6 +91,18 @@ const base64ToAudioUrl = (audioBase64: string, mimeType: string): string => {
     bytes[index] = byteCharacters.charCodeAt(index);
   }
   return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+};
+
+const configureMusicFriendlyAudioSession = (): boolean => {
+  const audioSession = (navigator as NavigatorWithAudioSession).audioSession;
+  if (!audioSession || !("type" in audioSession)) return false;
+
+  try {
+    audioSession.type = "ambient";
+    return audioSession.type === "ambient";
+  } catch {
+    return false;
+  }
 };
 
 const getRoadHistoryDescription = (context: VoiceWarningContext): string => {
@@ -236,6 +254,8 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       return false;
     }
 
+    configureMusicFriendlyAudioSession();
+
     const audio = audioRef.current ?? new Audio();
     audioRef.current = audio;
     audio.preload = "auto";
@@ -333,6 +353,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         }
         const audioUrl = base64ToAudioUrl(payload.audioBase64, payload.mimeType);
         const audio = audioRef.current ?? new Audio();
+        configureMusicFriendlyAudioSession();
         audioRef.current = audio;
         audio.pause();
         revokeCurrentAudioUrl();
