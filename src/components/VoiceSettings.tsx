@@ -121,6 +121,7 @@ export function VoiceSettings({
                 {([
                   ["calm", "Calm"],
                   ["standup", "Edgy comic"],
+                  ["roast", "Roast"],
                 ] as Array<[DrivingCompanionPersonality, string]>).map(([personality, label]) => (
                   <button
                     key={personality}

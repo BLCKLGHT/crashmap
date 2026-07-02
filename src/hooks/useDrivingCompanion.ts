@@ -24,6 +24,7 @@ type DrivingContextJson = {
   recommendedCarLengths: number;
   currentHeading?: number;
   timeOfDay?: string;
+  roadContext?: string;
   roadHistoryDescription: string;
   lastMessages: string[];
   trigger: {
@@ -102,6 +103,7 @@ const buildDrivingContextJson = (
   weatherMatched: context.matchedCrashCount > 0,
   recommendedCarLengths: context.carLengths,
   timeOfDay: context.currentConditions?.lightCondition,
+  roadContext: context.roadContext,
   roadHistoryDescription: getRoadHistoryDescription(context),
   lastMessages,
   trigger: {
@@ -127,6 +129,7 @@ const makeTestContext = (
     weatherMatched: false,
     recommendedCarLengths: 7,
     timeOfDay: "daylight",
+    roadContext: "Macquarie Street near Murray Street",
     roadHistoryDescription: "a little higher than usual",
     lastMessages,
     trigger: { type, priority: 99, severity: "medium" },
@@ -378,6 +381,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
           weatherMatched: false,
           recommendedCarLengths: 6,
           timeOfDay: "daylight",
+          roadContext: "Davey Street near the Southern Outlet",
           roadHistoryDescription: "low",
           lastMessages: lastMessagesRef.current,
           trigger: { type: "calm_reminder", priority: 99, severity: "low" },

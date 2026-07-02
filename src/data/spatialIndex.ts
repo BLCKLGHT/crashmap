@@ -34,6 +34,13 @@ export type CrashSpatialIndex = {
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 const toDegrees = (radians: number): number => (radians * 180) / Math.PI;
 
+const getRoadContext = (description?: string): string | undefined => {
+  if (!description) return undefined;
+  const normalised = description.replace(/\s+/g, " ").trim();
+  if (!normalised) return undefined;
+  return normalised.length > 90 ? `${normalised.slice(0, 87).trim()}...` : normalised;
+};
+
 const cellKey = (latitude: number, longitude: number): string =>
   `${Math.floor(latitude / CELL_SIZE_DEGREES)}:${Math.floor(longitude / CELL_SIZE_DEGREES)}`;
 
@@ -372,6 +379,8 @@ export const getDashboardLookaheadRisk = (
   let darkCrashCount = 0;
   let conditionMatchScore = 0;
   let conditionDataCount = 0;
+  let roadContext: string | undefined;
+  let roadContextDistance = Number.POSITIVE_INFINITY;
 
   for (const result of candidates) {
     if (!hasHeading) break;
@@ -404,6 +413,11 @@ export const getDashboardLookaheadRisk = (
     }
 
     totalCrashCount += 1;
+    const candidateRoadContext = getRoadContext(result.crash.locationDescription);
+    if (candidateRoadContext && forwardMetres < roadContextDistance) {
+      roadContext = candidateRoadContext;
+      roadContextDistance = forwardMetres;
+    }
     nearestCrashDistanceMetres = Math.min(
       nearestCrashDistanceMetres ?? Number.POSITIVE_INFINITY,
       forwardMetres,
@@ -457,6 +471,7 @@ export const getDashboardLookaheadRisk = (
       ? `${currentConditions.surfaceCondition} road, ${currentConditions.lightCondition.replace("_", "/")}`
       : undefined,
     conditionDataAvailable: conditionDataCount > 0,
+    roadContext,
     nearestCrashDistanceMetres:
       nearestCrashDistanceMetres === Number.POSITIVE_INFINITY
         ? undefined

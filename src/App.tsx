@@ -1161,6 +1161,7 @@ function App() {
       darkCrashCount: dashboardLookaheadRisk?.darkCrashCount ?? 0,
       currentConditions: activeDrivingConditions,
       lookaheadDistanceMetres: dashboardLookaheadRisk?.lookaheadDistanceMetres ?? 500,
+      roadContext: dashboardLookaheadRisk?.roadContext,
       segmentKey: getVoiceSegmentKey(
         displayedDriveLocation,
         dashboardLookaheadRisk?.riskLevel ?? "low",

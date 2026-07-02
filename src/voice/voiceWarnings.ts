@@ -13,7 +13,7 @@ export type VoiceWarningType =
 export type VoiceIntensity = "minimal" | "normal" | "detailed";
 export type DrivingCompanionMode = "off" | "minimal" | "normal" | "coaching";
 export type DrivingCompanionVoice = "alloy" | "ash" | "ballad" | "coral" | "echo" | "sage" | "shimmer" | "verse";
-export type DrivingCompanionPersonality = "calm" | "standup";
+export type DrivingCompanionPersonality = "calm" | "standup" | "roast";
 export type DrivingCompanionSpeechSpeed = "normal" | "fast" | "faster";
 
 export type VoiceWarningSettings = {
@@ -56,6 +56,7 @@ export type VoiceWarningContext = {
   darkCrashCount: number;
   currentConditions: CurrentDrivingConditions | null;
   lookaheadDistanceMetres: number;
+  roadContext?: string;
   segmentKey: string;
 };
 

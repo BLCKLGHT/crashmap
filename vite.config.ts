@@ -17,6 +17,7 @@ Interpret the information instead.
 Keep responses one sentence, maximum 20 words, conversational, calm, varied, and human.
 Never repeat previous wording. Avoid repeating ideas already spoken recently.
 Always frame crash information as historical or recorded road history, not live crash detection.
+If drivingContext.roadContext is available, mention that road or intersection naturally and briefly.
 
 Use punctuation to guide expressive speech: commas for timing, short dashes for emphasis, and occasional ellipses for a pause.
 For speed-limit warnings, one exclamation mark is allowed when the driver is clearly over the limit.
@@ -27,6 +28,8 @@ const STYLE_PROMPTS: Record<string, string> = {
     "Delivery style: calm, warm, lightly expressive, and steady. Keep it useful, not theatrical.",
   standup:
     "Delivery style: dry, blunt, lightly sarcastic stand-up energy with expressive rhythm. Do not imitate any specific comedian. No insults, no profanity, no panic, and keep the driving advice clear.",
+  roast:
+    "Delivery style: playful roast mode. Lightly make fun of the driver's choices, especially speeding or tailgating, but keep it affectionate, brief, non-abusive, and focused on the driving behaviour. No profanity, no slurs, no personal attacks, no shame spirals.",
 };
 
 const TTS_INSTRUCTIONS: Record<string, string> = {
@@ -34,6 +37,8 @@ const TTS_INSTRUCTIONS: Record<string, string> = {
     "Calm, warm, conversational Australian driving companion. Quicker than normal, with natural dynamic range, clear emphasis, and expressive punctuation.",
   standup:
     "Expressive Australian driving companion with dry stand-up timing, dynamic range, varied pacing, and a wry half-smile. Use punctuation cues for punch and rhythm. Do not imitate any specific comedian. Keep it brief and clear.",
+  roast:
+    "Playful, cheeky Australian driving companion. Use expressive timing, quick punchy emphasis, and punctuation cues. Roast the behaviour lightly, not the person. Keep it brief, clear, and non-abusive.",
 };
 
 const readRequestBody = async (request: import("http").IncomingMessage): Promise<string> =>
@@ -105,7 +110,10 @@ export default defineConfig({
             const model = process.env.OPENAI_DRIVING_MODEL ?? "gpt-4.1-mini";
             const speechModel = process.env.OPENAI_TTS_MODEL ?? "gpt-4o-mini-tts";
             const voice = body.voice ?? "alloy";
-            const personality = body.personality === "standup" ? "standup" : "calm";
+            const personality =
+              body.personality === "standup" || body.personality === "roast"
+                ? body.personality
+                : "calm";
             const speechSpeed =
               typeof body.speechSpeed === "number"
                 ? Math.min(1.5, Math.max(0.8, body.speechSpeed))

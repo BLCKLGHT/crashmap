@@ -159,6 +159,7 @@ export type DashboardLookaheadRisk = {
   riskLevel: DashboardCrashRiskLevel;
   label: string;
   message: string;
+  roadContext?: string;
   hasHeading: boolean;
 };
 
