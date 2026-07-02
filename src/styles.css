@@ -453,6 +453,14 @@ button:disabled {
   line-height: 1;
 }
 
+.dashboard-history__condition {
+  max-width: 28rem;
+  margin: -0.18rem 0 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.92rem;
+  font-weight: 850;
+}
+
 .dashboard-history__stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1128,6 +1136,14 @@ input[type="range"] {
 .filter-group {
   display: grid;
   gap: 0.45rem;
+}
+
+.filter-note {
+  margin: -0.12rem 0 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 760;
+  line-height: 1.3;
 }
 
 .filter-label,

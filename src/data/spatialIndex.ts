@@ -1,9 +1,12 @@
 import { isFatalCrash, isSeriousCrash } from "./filterCrashes";
+import { getCrashConditionMatch } from "./conditionMatching";
 import type {
   CrashRecord,
+  CurrentDrivingConditions,
   DashboardLookaheadRisk,
   DriveLocation,
   DriveRiskSummary,
+  WeatherMatchMode,
 } from "../types/crash";
 
 const CELL_SIZE_DEGREES = 0.01;
@@ -131,6 +134,7 @@ const classifyLookaheadRisk = (
   totalCrashCount: number,
   seriousCount: number,
   fatalCount: number,
+  conditionMatchScore = totalCrashCount,
 ): Pick<DashboardLookaheadRisk, "riskLevel" | "label" | "message"> => {
   // Initial awareness thresholds, not a live hazard model:
   // high = any fatality, multiple serious crashes, or very heavy total crash history;
@@ -138,7 +142,7 @@ const classifyLookaheadRisk = (
   // low = sparse property-only crash history.
   // The total-count threshold is intentionally higher than the drive-mode warning threshold
   // because Dashboard Mode looks 500m ahead on roads with dense historical records.
-  if (fatalCount >= 1 || seriousCount >= 2 || totalCrashCount >= 25) {
+  if (fatalCount >= 1 || seriousCount >= 2 || conditionMatchScore >= 25) {
     return {
       riskLevel: "high",
       label: "High crash history ahead",
@@ -149,7 +153,7 @@ const classifyLookaheadRisk = (
     };
   }
 
-  if (seriousCount >= 1 || totalCrashCount >= 8) {
+  if (seriousCount >= 1 || conditionMatchScore >= 8) {
     return {
       riskLevel: "medium",
       label: "Medium crash history ahead",
@@ -273,6 +277,8 @@ export const getDashboardLookaheadRisk = (
   location: DriveLocation | null,
   lookaheadDistanceMetres = 500,
   corridorWidthMetres = 80,
+  currentConditions: CurrentDrivingConditions | null = null,
+  weatherMode: WeatherMatchMode = "weighted",
 ): DashboardLookaheadRisk | null => {
   if (!index || !location) return null;
 
@@ -287,12 +293,20 @@ export const getDashboardLookaheadRisk = (
   const forwardUnitX = Math.sin(headingRadians);
   const forwardUnitY = Math.cos(headingRadians);
   const halfWidth = corridorWidthMetres / 2;
+  const effectiveWeatherMode = currentConditions ? weatherMode : "all";
 
   let totalCrashCount = 0;
   let seriousCount = 0;
   let fatalCount = 0;
   let propertyDamageCount = 0;
   let nearestCrashDistanceMetres: number | undefined;
+  let matchedCrashCount = 0;
+  let matchedSeriousCount = 0;
+  let matchedFatalCount = 0;
+  let wetCrashCount = 0;
+  let darkCrashCount = 0;
+  let conditionMatchScore = 0;
+  let conditionDataCount = 0;
 
   for (const result of candidates) {
     if (!hasHeading) break;
@@ -313,17 +327,47 @@ export const getDashboardLookaheadRisk = (
       continue;
     }
 
+    const conditionMatch = getCrashConditionMatch(result.crash, currentConditions);
+    if (effectiveWeatherMode === "strict" && !conditionMatch.isMatch) continue;
+    if (
+      effectiveWeatherMode === "similar" &&
+      conditionMatch.hasConditionData &&
+      !conditionMatch.isMatch
+    ) {
+      continue;
+    }
+
     totalCrashCount += 1;
     nearestCrashDistanceMetres = Math.min(
       nearestCrashDistanceMetres ?? Number.POSITIVE_INFINITY,
       forwardMetres,
     );
-    if (isFatalCrash(result.crash)) fatalCount += 1;
-    else if (isSeriousCrash(result.crash)) seriousCount += 1;
+
+    const isFatal = isFatalCrash(result.crash);
+    const isSerious = isSeriousCrash(result.crash);
+
+    if (isFatal) fatalCount += 1;
+    else if (isSerious) seriousCount += 1;
     else propertyDamageCount += 1;
+
+    if (conditionMatch.hasConditionData) conditionDataCount += 1;
+    if (conditionMatch.surface === "wet") wetCrashCount += 1;
+    if (conditionMatch.light === "dark") darkCrashCount += 1;
+    if (conditionMatch.isMatch) {
+      matchedCrashCount += 1;
+      if (isFatal) matchedFatalCount += 1;
+      else if (isSerious) matchedSeriousCount += 1;
+    }
+
+    conditionMatchScore += effectiveWeatherMode === "weighted" ? conditionMatch.weight : 1;
   }
 
-  const classification = classifyLookaheadRisk(totalCrashCount, seriousCount, fatalCount);
+  const classification = classifyLookaheadRisk(
+    totalCrashCount,
+    seriousCount,
+    fatalCount,
+    conditionMatchScore,
+  );
 
   return {
     lookaheadDistanceMetres,
@@ -332,6 +376,16 @@ export const getDashboardLookaheadRisk = (
     seriousCount,
     fatalCount,
     propertyDamageCount,
+    matchedCrashCount,
+    matchedSeriousCount,
+    matchedFatalCount,
+    wetCrashCount,
+    darkCrashCount,
+    conditionMatchScore,
+    conditionLabel: currentConditions
+      ? `${currentConditions.surfaceCondition} road, ${currentConditions.lightCondition.replace("_", "/")}`
+      : undefined,
+    conditionDataAvailable: conditionDataCount > 0,
     nearestCrashDistanceMetres:
       nearestCrashDistanceMetres === Number.POSITIVE_INFINITY
         ? undefined

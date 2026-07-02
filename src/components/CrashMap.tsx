@@ -3,12 +3,20 @@ import type { Feature, Point } from "geojson";
 import L from "leaflet";
 import "leaflet.heat";
 import Supercluster from "supercluster";
-import type { CrashRecord, DriveLocation } from "../types/crash";
+import type {
+  CrashRecord,
+  CurrentDrivingConditions,
+  DriveLocation,
+  WeatherMapFilterMode,
+} from "../types/crash";
+import { getCrashConditionMatch } from "../data/conditionMatching";
 import { isFatalCrash, isSeriousCrash } from "../data/filterCrashes";
 
 type CrashMapProps = {
   crashes: CrashRecord[];
   heatmapCrashes?: CrashRecord[];
+  currentConditions?: CurrentDrivingConditions | null;
+  weatherMode?: WeatherMapFilterMode;
   timePhase: "day" | "dawn" | "dusk" | "night";
   isFullscreen?: boolean;
   driveMode?: {
@@ -116,6 +124,15 @@ const getHeatWeight = (crash: CrashRecord): number => {
   return 0.52;
 };
 
+const getConditionWeight = (
+  crash: CrashRecord,
+  currentConditions?: CurrentDrivingConditions | null,
+  weatherMode?: WeatherMapFilterMode,
+): number => {
+  if (weatherMode !== "weighted" || !currentConditions) return 1;
+  return getCrashConditionMatch(crash, currentConditions).weight;
+};
+
 const getRenderMode = (zoom: number): RenderMode => {
   if (zoom <= LOW_ZOOM_MAX) return "heatmap";
   if (zoom <= MEDIUM_ZOOM_MAX) return "clusters";
@@ -157,8 +174,13 @@ const popupHtml = (crash: CrashRecord): string => `
   </article>
 `;
 
-const toFeature = (crash: CrashRecord): CrashFeature => {
+const toFeature = (
+  crash: CrashRecord,
+  currentConditions?: CurrentDrivingConditions | null,
+  weatherMode?: WeatherMapFilterMode,
+): CrashFeature => {
   const severity = getSeverityClass(crash);
+  const conditionWeight = getConditionWeight(crash, currentConditions, weatherMode);
 
   return {
     type: "Feature",
@@ -168,7 +190,7 @@ const toFeature = (crash: CrashRecord): CrashFeature => {
     },
     properties: {
       crash,
-      risk: getRiskWeight(crash),
+      risk: getRiskWeight(crash) * conditionWeight,
       fatalCount: severity === "fatal" ? 1 : 0,
       seriousCount: severity === "serious" ? 1 : 0,
     },
@@ -320,6 +342,8 @@ const destinationPoint = (
 export function CrashMap({
   crashes,
   heatmapCrashes,
+  currentConditions,
+  weatherMode,
   timePhase,
   isFullscreen = false,
   driveMode,
@@ -357,13 +381,17 @@ export function CrashMap({
 
     return heatSource.map(
         (crash) =>
-          [crash.latitude, crash.longitude, getHeatWeight(crash)] as [
+          [
+            crash.latitude,
+            crash.longitude,
+            getHeatWeight(crash) * getConditionWeight(crash, currentConditions, weatherMode),
+          ] as [
             number,
             number,
             number,
           ],
       );
-  }, [crashes, driveMode?.isActive, heatmapCrashes]);
+  }, [crashes, currentConditions, driveMode?.isActive, heatmapCrashes, weatherMode]);
 
   const clusterIndex = useMemo(() => {
     const index = new Supercluster<CrashPointProperties, ClusterProperties>({
@@ -382,10 +410,10 @@ export function CrashMap({
       },
     });
 
-    index.load(crashes.map(toFeature));
+    index.load(crashes.map((crash) => toFeature(crash, currentConditions, weatherMode)));
     lastClusterKeyRef.current = "";
     return index;
-  }, [crashes]);
+  }, [crashes, currentConditions, weatherMode]);
 
   useEffect(() => {
     clusterIndexRef.current = clusterIndex;

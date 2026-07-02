@@ -1,5 +1,11 @@
 import { Car, CarFront, FlaskConical, Pause, Play, Square } from "lucide-react";
-import type { DashboardLookaheadRisk, DriveLocation, DriveRiskSummary } from "../types/crash";
+import type {
+  CurrentDrivingConditions,
+  DashboardLookaheadRisk,
+  DriveLocation,
+  DriveRiskSummary,
+  WeatherState,
+} from "../types/crash";
 
 type DashboardModeProps = {
   isActive: boolean;
@@ -8,6 +14,8 @@ type DashboardModeProps = {
   location: DriveLocation | null;
   driveRisk: DriveRiskSummary | null;
   lookaheadRisk: DashboardLookaheadRisk | null;
+  currentConditions: CurrentDrivingConditions | null;
+  weatherStatus: WeatherState["status"];
   error: string | null;
   onStartDrive: () => void;
   onStartSimulation: () => void;
@@ -90,12 +98,32 @@ const getRoadHistoryDistanceLabel = (lookaheadRisk: DashboardLookaheadRisk | nul
   return `In ${roundedDistance} m`;
 };
 
-const getRoadHistoryHeadline = (lookaheadRisk: DashboardLookaheadRisk | null): string => {
+const getConditionLabel = (conditions: CurrentDrivingConditions | null): string => {
+  if (!conditions) return "Weather unavailable";
+  const surface =
+    conditions.surfaceCondition === "wet"
+      ? "wet road"
+      : conditions.surfaceCondition === "dry"
+        ? "dry road"
+        : "road unknown";
+  const light = conditions.lightCondition.replace("_", "/");
+  return `${surface}, ${light}`;
+};
+
+const getRoadHistoryHeadline = (
+  lookaheadRisk: DashboardLookaheadRisk | null,
+  currentConditions: CurrentDrivingConditions | null,
+): string => {
   if (!lookaheadRisk?.hasHeading) return "Waiting for movement";
   if (lookaheadRisk.riskLevel === "low") return "No elevated history ahead";
+  if (currentConditions?.surfaceCondition === "wet" && lookaheadRisk.matchedCrashCount > 0) {
+    return "Wet-road crash history";
+  }
   if (lookaheadRisk.fatalCount > 0) return "Fatal record ahead";
   if (lookaheadRisk.riskLevel === "high") return "High crash history";
-  return "Medium crash history";
+  return lookaheadRisk.matchedCrashCount > 0
+    ? "Similar-condition history"
+    : "Medium crash history";
 };
 
 export function DashboardMode({
@@ -105,6 +133,8 @@ export function DashboardMode({
   location,
   driveRisk,
   lookaheadRisk,
+  currentConditions,
+  weatherStatus,
   error,
   onStartDrive,
   onStartSimulation,
@@ -117,7 +147,11 @@ export function DashboardMode({
   const hasMoreCarLengths = carLengths > 10;
   const risk = lookaheadRisk?.riskLevel ?? "low";
   const distanceLabel = getRoadHistoryDistanceLabel(lookaheadRisk);
-  const historyHeadline = getRoadHistoryHeadline(lookaheadRisk);
+  const historyHeadline = getRoadHistoryHeadline(lookaheadRisk, currentConditions);
+  const conditionLabel = getConditionLabel(currentConditions);
+  const hasConditionData = lookaheadRisk?.conditionDataAvailable ?? false;
+  const matchedCrashCount = lookaheadRisk?.matchedCrashCount ?? 0;
+  const showMatchedStats = currentConditions !== null && hasConditionData;
   const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
 
   return (
@@ -188,22 +222,35 @@ export function DashboardMode({
       <div className="dashboard-history">
         <span>Road history ahead</span>
         <strong>{distanceLabel}</strong>
+        <p className="dashboard-history__condition">Current condition: {conditionLabel}</p>
         <h2>{historyHeadline}</h2>
         <div className="dashboard-history__stats">
           <div>
-            <span>Crashes</span>
-            <strong>{lookaheadRisk?.totalCrashCount ?? 0}</strong>
+            <span>{showMatchedStats ? "Matched" : "Crashes"}</span>
+            <strong>{showMatchedStats ? matchedCrashCount : lookaheadRisk?.totalCrashCount ?? 0}</strong>
           </div>
           <div>
             <span>Serious</span>
-            <strong>{lookaheadRisk?.seriousCount ?? 0}</strong>
+            <strong>
+              {showMatchedStats
+                ? lookaheadRisk?.matchedSeriousCount ?? 0
+                : lookaheadRisk?.seriousCount ?? 0}
+            </strong>
           </div>
           <div>
             <span>Fatal</span>
-            <strong>{lookaheadRisk?.fatalCount ?? 0}</strong>
+            <strong>
+              {showMatchedStats
+                ? lookaheadRisk?.matchedFatalCount ?? 0
+                : lookaheadRisk?.fatalCount ?? 0}
+            </strong>
           </div>
         </div>
-        <small>Historical crash data only. Not live navigation or real-time hazard detection.</small>
+        {!hasConditionData && currentConditions && (
+          <small>Limited weather-condition data available.</small>
+        )}
+        {weatherStatus === "error" && <small>Weather unavailable. Showing all crash history.</small>}
+        <small>Historical crash data only. Weather matching is approximate.</small>
         {error && <small className="dashboard-error">{error}</small>}
       </div>
     </section>

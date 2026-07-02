@@ -1,8 +1,16 @@
 import type { Dispatch, SetStateAction } from "react";
 import { Moon, Pause, Play, RefreshCw, SlidersHorizontal, Sun, X } from "lucide-react";
-import type { CrashFilters, CrashRecord, TimelineState } from "../types/crash";
+import type {
+  CrashFilters,
+  CrashRecord,
+  CurrentDrivingConditions,
+  TimelineState,
+  WeatherState,
+} from "../types/crash";
 import { defaultFilters, uniqueOptions } from "../data/filterCrashes";
 import { Legend } from "./Legend";
+
+type WeatherSimulationMode = "live" | "wet" | "dry" | "daylight" | "dark" | "failure";
 
 type FilterPanelProps = {
   crashes: CrashRecord[];
@@ -13,9 +21,13 @@ type FilterPanelProps = {
   isRefreshing: boolean;
   timeline: TimelineState | null;
   isTimeOfDayEnabled: boolean;
+  currentConditions: CurrentDrivingConditions | null;
+  weatherStatus: WeatherState["status"];
+  weatherSimulationMode: WeatherSimulationMode;
   onChange: (filters: CrashFilters) => void;
   onTimelineChange: Dispatch<SetStateAction<TimelineState | null>>;
   onTimeOfDayToggle: () => void;
+  onWeatherSimulationChange: (mode: WeatherSimulationMode) => void;
   onRefresh: () => void;
   onOpen: () => void;
   onClose: () => void;
@@ -55,6 +67,13 @@ const formatTimelineDateTime = (time?: number): string => {
 const clamp = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, value));
 
+const formatConditionLabel = (conditions: CurrentDrivingConditions | null): string => {
+  if (!conditions) return "Weather unavailable";
+  const surface = conditions.surfaceCondition === "wet" ? "wet road" : conditions.surfaceCondition;
+  const light = conditions.lightCondition.replace("_", "/");
+  return `${surface}, ${light}`;
+};
+
 export function FilterPanel({
   crashes,
   filteredCount,
@@ -64,9 +83,13 @@ export function FilterPanel({
   isRefreshing,
   timeline,
   isTimeOfDayEnabled,
+  currentConditions,
+  weatherStatus,
+  weatherSimulationMode,
   onChange,
   onTimelineChange,
   onTimeOfDayToggle,
+  onWeatherSimulationChange,
   onRefresh,
   onOpen,
   onClose,
@@ -276,6 +299,68 @@ export function FilterPanel({
             </button>
           </section>
         )}
+
+        <div className="filter-group">
+          <span className="filter-label">Weather-matched crash history</span>
+          <div className="segmented-control" role="group" aria-label="Weather history filter">
+            <button
+              className={filters.weatherMode === "all" ? "is-active" : ""}
+              type="button"
+              onClick={() => setFilter("weatherMode", "all")}
+            >
+              All
+            </button>
+            <button
+              className={filters.weatherMode === "weighted" ? "is-active" : ""}
+              type="button"
+              onClick={() => setFilter("weatherMode", "weighted")}
+            >
+              Similar now
+            </button>
+            <button
+              className={filters.weatherMode === "wet" ? "is-active" : ""}
+              type="button"
+              onClick={() => setFilter("weatherMode", "wet")}
+            >
+              Wet
+            </button>
+            <button
+              className={filters.weatherMode === "dry" ? "is-active" : ""}
+              type="button"
+              onClick={() => setFilter("weatherMode", "dry")}
+            >
+              Dry
+            </button>
+            <button
+              className={filters.weatherMode === "dark" ? "is-active" : ""}
+              type="button"
+              onClick={() => setFilter("weatherMode", "dark")}
+            >
+              Night
+            </button>
+          </div>
+          <p className="filter-note">
+            Current condition: {formatConditionLabel(currentConditions)}
+            {weatherStatus === "loading" ? " · updating" : ""}
+          </p>
+        </div>
+
+        <label className="field">
+          <span>Developer weather simulation</span>
+          <select
+            value={weatherSimulationMode}
+            onChange={(event) =>
+              onWeatherSimulationChange(event.target.value as WeatherSimulationMode)
+            }
+          >
+            <option value="live">Live weather</option>
+            <option value="wet">Simulate wet</option>
+            <option value="dry">Simulate dry</option>
+            <option value="daylight">Simulate daylight</option>
+            <option value="dark">Simulate night</option>
+            <option value="failure">Simulate weather failure</option>
+          </select>
+        </label>
 
         <div className="filter-group">
           <span className="filter-label">Severity</span>

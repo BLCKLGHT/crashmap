@@ -9,6 +9,7 @@ export const defaultFilters: CrashFilters = {
   speedZone: ALL_VALUE,
   lightCondition: ALL_VALUE,
   surfaceType: ALL_VALUE,
+  weatherMode: "weighted",
 };
 
 export const isFatalCrash = (crash: CrashRecord): boolean =>
