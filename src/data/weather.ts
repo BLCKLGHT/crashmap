@@ -65,6 +65,23 @@ const WEATHER_LABELS = new Map<number, string>([
   [95, "storm"],
 ]);
 
+const WEATHER_REQUEST_TIMEOUT_MS = 8000;
+const HISTORICAL_WEATHER_REQUEST_TIMEOUT_MS = 6000;
+
+const fetchWithTimeout = async (
+  url: string,
+  timeoutMs: number,
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+
 const getFallbackLightCondition = (date: Date): NormalisedLightCondition => {
   const hour = date.getHours();
   if (hour >= 7 && hour < 17) return "daylight";
@@ -153,11 +170,15 @@ export const fetchCurrentWeather = async (
   const params = new URLSearchParams({
     latitude: latitude.toFixed(5),
     longitude: longitude.toFixed(5),
-    current: "temperature_2m,precipitation,rain,showers,weather_code,wind_speed_10m,is_day",
+    current:
+      "temperature_2m,precipitation,rain,showers,snowfall,weather_code,cloud_cover,visibility,wind_speed_10m,is_day",
     timezone: "auto",
   });
 
-  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
+  const response = await fetchWithTimeout(
+    `https://api.open-meteo.com/v1/forecast?${params.toString()}`,
+    WEATHER_REQUEST_TIMEOUT_MS,
+  );
   if (!response.ok) {
     throw new Error(`Weather request failed with status ${response.status}`);
   }
@@ -170,6 +191,7 @@ export const fetchCurrentWeather = async (
     precipitation: current.precipitation,
     rain: current.rain,
     showers: current.showers,
+    snowfall: current.snowfall,
     weatherCode: current.weather_code,
     cloudCover: current.cloud_cover,
     temperature: current.temperature_2m,
@@ -241,11 +263,14 @@ export const getHistoricalWeatherForCrash = async (
     start_date: date,
     end_date: date,
     hourly:
-      "temperature_2m,precipitation,rain,snowfall,weather_code,cloud_cover,wind_speed_10m",
+      "temperature_2m,precipitation,rain,snowfall,weather_code,cloud_cover,visibility,wind_speed_10m",
     timezone: "auto",
   });
 
-  const response = await fetch(`https://archive-api.open-meteo.com/v1/archive?${params.toString()}`);
+  const response = await fetchWithTimeout(
+    `https://archive-api.open-meteo.com/v1/archive?${params.toString()}`,
+    HISTORICAL_WEATHER_REQUEST_TIMEOUT_MS,
+  );
   if (!response.ok) throw new Error(`Historical weather request failed with ${response.status}`);
 
   const data = (await response.json()) as OpenMeteoArchiveResponse;

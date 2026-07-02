@@ -4,6 +4,7 @@ import type {
   CrashFilters,
   CrashRecord,
   CurrentDrivingConditions,
+  CurrentWeather,
   TimelineState,
   WeatherState,
 } from "../types/crash";
@@ -30,6 +31,7 @@ type FilterPanelProps = {
   timeline: TimelineState | null;
   isTimeOfDayEnabled: boolean;
   currentConditions: CurrentDrivingConditions | null;
+  currentWeather: CurrentWeather | null;
   weatherStatus: WeatherState["status"];
   weatherSimulationMode: WeatherSimulationMode;
   onChange: (filters: CrashFilters) => void;
@@ -86,7 +88,28 @@ const formatConditionLabel = (
   }
   const surface = conditions.surfaceCondition === "wet" ? "wet road" : conditions.surfaceCondition;
   const light = conditions.lightCondition.replace("_", "/");
-  return `${surface}, ${light}`;
+  return `${status === "error" ? "estimated " : ""}${surface}, ${light}`;
+};
+
+const formatWeatherDetailLabel = (
+  weather: CurrentWeather | null,
+  conditions: CurrentDrivingConditions | null,
+  status: WeatherState["status"],
+): string => {
+  if (!weather) {
+    if (status === "simulated") return `simulated weather: ${conditions?.weatherLabel ?? "active"}`;
+    if (status === "loading") return "updating weather";
+    if (status === "error") return "weather unavailable, using estimated conditions";
+    return "waiting for current weather";
+  }
+
+  return [
+    typeof weather.temperature === "number" ? `${Math.round(weather.temperature)}°C` : null,
+    conditions?.weatherLabel,
+    typeof weather.windSpeed === "number" ? `wind ${Math.round(weather.windSpeed)} km/h` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 };
 
 export function FilterPanel({
@@ -99,6 +122,7 @@ export function FilterPanel({
   timeline,
   isTimeOfDayEnabled,
   currentConditions,
+  currentWeather,
   weatherStatus,
   weatherSimulationMode,
   onChange,
@@ -343,6 +367,8 @@ export function FilterPanel({
           <p className="filter-note">
             Current condition: {formatConditionLabel(currentConditions, weatherStatus)}
             {weatherStatus === "loading" ? " · updating" : ""}
+            {" · "}
+            {formatWeatherDetailLabel(currentWeather, currentConditions, weatherStatus)}
           </p>
         </div>
 

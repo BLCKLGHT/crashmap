@@ -716,7 +716,7 @@ function App() {
         if (isCancelled) return;
         setWeatherState({
           weather: null,
-          conditions: null,
+          conditions: getCurrentDrivingConditions(null, new Date()),
           fetchedAt: now,
           latitude: driveLocation.latitude,
           longitude: driveLocation.longitude,
@@ -1219,6 +1219,7 @@ function App() {
           driveRisk={driveRisk}
           lookaheadRisk={dashboardLookaheadRisk}
           currentConditions={activeDrivingConditions}
+          currentWeather={weatherState.weather}
           weatherStatus={
             weatherSimulationMode === "failure" ? "error" : weatherSimulationMode === "live" ? weatherState.status : "simulated"
           }
@@ -1293,6 +1294,7 @@ function App() {
           timeline={timeline}
           isTimeOfDayEnabled={isTimeOfDayEnabled}
           currentConditions={activeDrivingConditions}
+          currentWeather={weatherState.weather}
           weatherStatus={
             weatherSimulationMode === "failure" ? "error" : weatherSimulationMode === "live" ? weatherState.status : "simulated"
           }

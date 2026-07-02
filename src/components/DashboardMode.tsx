@@ -1,6 +1,7 @@
 import { Car, CarFront, FlaskConical, Pause, Play, Square } from "lucide-react";
 import type {
   CurrentDrivingConditions,
+  CurrentWeather,
   DashboardLookaheadRisk,
   DriveLocation,
   DriveRiskSummary,
@@ -16,6 +17,7 @@ type DashboardModeProps = {
   driveRisk: DriveRiskSummary | null;
   lookaheadRisk: DashboardLookaheadRisk | null;
   currentConditions: CurrentDrivingConditions | null;
+  currentWeather: CurrentWeather | null;
   weatherStatus: WeatherState["status"];
   weatherMatchStatus: HistoricalWeatherMatchState["status"];
   error: string | null;
@@ -116,7 +118,28 @@ const getConditionLabel = (
         ? "dry road"
         : "road unknown";
   const light = conditions.lightCondition.replace("_", "/");
-  return `${surface}, ${light}`;
+  return `${status === "error" ? "estimated " : ""}${surface}, ${light}`;
+};
+
+const getWeatherDetailLabel = (
+  weather: CurrentWeather | null,
+  conditions: CurrentDrivingConditions | null,
+  status: WeatherState["status"],
+): string => {
+  if (!weather) {
+    if (status === "simulated") return `Simulated weather: ${conditions?.weatherLabel ?? "active"}`;
+    if (status === "loading") return "Weather: updating";
+    if (status === "error") return "Weather unavailable, using time-of-day estimate";
+    return "Weather: waiting for location";
+  }
+
+  const parts = [
+    typeof weather.temperature === "number" ? `${Math.round(weather.temperature)}°C` : null,
+    conditions?.weatherLabel,
+    typeof weather.windSpeed === "number" ? `wind ${Math.round(weather.windSpeed)} km/h` : null,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(", ") : "Current weather loaded";
 };
 
 const getRoadHistoryHeadline = (
@@ -158,6 +181,7 @@ export function DashboardMode({
   driveRisk,
   lookaheadRisk,
   currentConditions,
+  currentWeather,
   weatherStatus,
   weatherMatchStatus,
   error,
@@ -174,6 +198,7 @@ export function DashboardMode({
   const distanceLabel = getRoadHistoryDistanceLabel(lookaheadRisk);
   const historyHeadline = getRoadHistoryHeadline(lookaheadRisk, currentConditions);
   const conditionLabel = getConditionLabel(currentConditions, weatherStatus);
+  const weatherDetailLabel = getWeatherDetailLabel(currentWeather, currentConditions, weatherStatus);
   const hasConditionData = lookaheadRisk?.conditionDataAvailable ?? false;
   const matchedCrashCount = lookaheadRisk?.matchedCrashCount ?? 0;
   const showMatchedStats = currentConditions !== null && hasConditionData;
@@ -250,6 +275,7 @@ export function DashboardMode({
         <strong>{distanceLabel}</strong>
         <p className="dashboard-history__condition">{weatherMatchLabel}</p>
         <p className="dashboard-history__condition">Current condition: {conditionLabel}</p>
+        <p className="dashboard-history__condition">{weatherDetailLabel}</p>
         <h2>{historyHeadline}</h2>
         <div className="dashboard-history__stats">
           <div>
