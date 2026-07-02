@@ -18,6 +18,20 @@ Keep responses one sentence, maximum 20 words, conversational, calm, varied, and
 Never repeat previous wording. Avoid repeating ideas already spoken recently.
 Always frame crash information as historical or recorded road history, not live crash detection.`;
 
+const STYLE_PROMPTS: Record<string, string> = {
+  calm:
+    "Delivery style: calm, warm, lightly expressive, and steady. Keep it useful, not theatrical.",
+  standup:
+    "Delivery style: dry, blunt, lightly sarcastic stand-up energy with expressive rhythm. Do not imitate any specific comedian. No insults, no profanity, no panic, and keep the driving advice clear.",
+};
+
+const TTS_INSTRUCTIONS: Record<string, string> = {
+  calm:
+    "Calm, warm, conversational Australian driving companion. Slightly quicker than normal, with natural dynamic range and clear emphasis.",
+  standup:
+    "Expressive Australian driving companion with dry stand-up timing, dynamic range, varied pacing, and a wry half-smile. Do not imitate any specific comedian. Keep it brief and clear.",
+};
+
 const readRequestBody = async (request: import("http").IncomingMessage): Promise<string> =>
   new Promise((resolve, reject) => {
     let body = "";
@@ -81,10 +95,19 @@ export default defineConfig({
               context: unknown;
               voice?: string;
               mode?: string;
+              personality?: string;
+              speechSpeed?: number;
             };
             const model = process.env.OPENAI_DRIVING_MODEL ?? "gpt-4.1-mini";
             const speechModel = process.env.OPENAI_TTS_MODEL ?? "gpt-4o-mini-tts";
             const voice = body.voice ?? "alloy";
+            const personality = body.personality === "standup" ? "standup" : "calm";
+            const speechSpeed =
+              typeof body.speechSpeed === "number"
+                ? Math.min(1.25, Math.max(0.8, body.speechSpeed))
+                : personality === "standup"
+                  ? 1.12
+                  : 1.08;
 
             const textResponse = await fetch("https://api.openai.com/v1/responses", {
               method: "POST",
@@ -94,7 +117,7 @@ export default defineConfig({
               },
               body: JSON.stringify({
                 model,
-                instructions: SYSTEM_PROMPT,
+                instructions: `${SYSTEM_PROMPT}\n\n${STYLE_PROMPTS[personality]}`,
                 input: [
                   {
                     role: "user",
@@ -104,6 +127,7 @@ export default defineConfig({
                         text: JSON.stringify(
                           {
                             mode: body.mode ?? "normal",
+                            personality,
                             drivingContext: body.context,
                           },
                           null,
@@ -135,8 +159,8 @@ export default defineConfig({
                 voice,
                 input: text,
                 response_format: "mp3",
-                speed: 0.95,
-                instructions: "Calm, warm, conversational Australian driving companion. No dramatic emphasis.",
+                speed: speechSpeed,
+                instructions: TTS_INSTRUCTIONS[personality],
               }),
             });
 

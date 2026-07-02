@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Bot, Volume2, VolumeX } from "lucide-react";
 import type {
   DrivingCompanionMode,
+  DrivingCompanionPersonality,
   DrivingCompanionSettings,
   DrivingCompanionVoice,
   VoiceWarningType,
@@ -113,6 +114,22 @@ export function VoiceSettings({
                 <button className="button" type="button" onClick={onTestVoice}>
                   Test voice
                 </button>
+              </div>
+
+              <div className="voice-settings__mode" role="radiogroup" aria-label="Driving companion personality">
+                {([
+                  ["calm", "Calm"],
+                  ["standup", "Edgy comic"],
+                ] as Array<[DrivingCompanionPersonality, string]>).map(([personality, label]) => (
+                  <button
+                    key={personality}
+                    className={settings.personality === personality ? "is-active" : ""}
+                    type="button"
+                    onClick={() => updateSetting("personality", personality)}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
               <label className="field">

@@ -13,6 +13,7 @@ export type VoiceWarningType =
 export type VoiceIntensity = "minimal" | "normal" | "detailed";
 export type DrivingCompanionMode = "off" | "minimal" | "normal" | "coaching";
 export type DrivingCompanionVoice = "alloy" | "ash" | "ballad" | "coral" | "echo" | "sage" | "shimmer" | "verse";
+export type DrivingCompanionPersonality = "calm" | "standup";
 
 export type VoiceWarningSettings = {
   enabled: boolean;
@@ -27,6 +28,7 @@ export type VoiceWarningSettings = {
 export type DrivingCompanionSettings = {
   mode: DrivingCompanionMode;
   voice: DrivingCompanionVoice;
+  personality: DrivingCompanionPersonality;
   volume: number;
 };
 
@@ -68,6 +70,7 @@ export const DEFAULT_VOICE_WARNING_SETTINGS: VoiceWarningSettings = {
 export const DEFAULT_DRIVING_COMPANION_SETTINGS: DrivingCompanionSettings = {
   mode: "normal",
   voice: "alloy",
+  personality: "calm",
   volume: 0.9,
 };
 

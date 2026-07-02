@@ -40,6 +40,8 @@ type CompanionResponse = {
 };
 
 const MIN_REQUEST_INTERVAL_MS = 20000;
+const DEFAULT_SPEECH_SPEED = 1.08;
+const STANDUP_SPEECH_SPEED = 1.12;
 const SILENT_AUDIO_DATA_URI =
   "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
 
@@ -278,6 +280,9 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
             context: drivingContext,
             mode: companionMode,
             voice: settings.voice,
+            personality: settings.personality,
+            speechSpeed:
+              settings.personality === "standup" ? STANDUP_SPEECH_SPEED : DEFAULT_SPEECH_SPEED,
           }),
         });
 
@@ -319,7 +324,16 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         }
       }
     },
-    [isSpeaking, isSupported, revokeCurrentAudioUrl, settings.mode, settings.voice, settings.volume, stopAudio],
+    [
+      isSpeaking,
+      isSupported,
+      revokeCurrentAudioUrl,
+      settings.mode,
+      settings.personality,
+      settings.voice,
+      settings.volume,
+      stopAudio,
+    ],
   );
 
   useEffect(() => {
