@@ -525,7 +525,7 @@ button:disabled {
 
 .dashboard-road-motion::before {
   position: absolute;
-  inset: -112% -8% -28%;
+  inset: -132% -18% -30%;
   content: "";
   background:
     repeating-linear-gradient(
@@ -536,7 +536,7 @@ button:disabled {
     ),
     linear-gradient(90deg, transparent 12%, rgba(255, 255, 255, 0.16) 50%, transparent 88%);
   filter: blur(0.15px);
-  transform: perspective(8rem) rotateX(58deg) scale(1.55, 1.62);
+  transform: translateY(-100px) perspective(8rem) rotateX(58deg) scale(1.78, 1.86);
   transform-origin: bottom;
   animation: dashboard-road-stream var(--road-flow-duration) linear infinite;
   will-change: background-position;
@@ -554,9 +554,9 @@ button:disabled {
 
 .dashboard-road-motion span {
   position: absolute;
-  top: -96%;
+  top: -132%;
   bottom: -26%;
-  width: 5px;
+  width: 6px;
   border-radius: 999px;
   background: repeating-linear-gradient(
     180deg,
@@ -572,18 +572,18 @@ button:disabled {
 
 .dashboard-road-motion span:nth-child(1) {
   left: 20%;
-  transform: perspective(7rem) rotateX(57deg) rotateZ(9deg) scale(1.22, 1.85);
+  transform: translateY(-100px) perspective(7rem) rotateX(57deg) rotateZ(9deg) scale(1.4, 2.13);
 }
 
 .dashboard-road-motion span:nth-child(2) {
   left: 50%;
-  transform: perspective(7rem) rotateX(57deg) scale(1.2, 1.85);
+  transform: translateY(-100px) perspective(7rem) rotateX(57deg) scale(1.38, 2.13);
   animation-delay: calc(var(--road-flow-duration) * -0.22);
 }
 
 .dashboard-road-motion span:nth-child(3) {
   right: 20%;
-  transform: perspective(7rem) rotateX(57deg) rotateZ(-9deg) scale(1.22, 1.85);
+  transform: translateY(-100px) perspective(7rem) rotateX(57deg) rotateZ(-9deg) scale(1.4, 2.13);
   animation-delay: calc(var(--road-flow-duration) * -0.44);
 }
 
@@ -599,6 +599,31 @@ button:disabled {
   mix-blend-mode: screen;
   opacity: 0.34;
   animation: dashboard-wet-shimmer 7s ease-in-out infinite;
+}
+
+.dashboard-distance--rain::after {
+  position: absolute;
+  inset: -18% -8%;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    repeating-linear-gradient(
+      108deg,
+      transparent 0 18px,
+      rgba(186, 230, 253, 0.36) 19px 21px,
+      transparent 22px 42px
+    ),
+    repeating-linear-gradient(
+      102deg,
+      transparent 0 34px,
+      rgba(255, 255, 255, 0.18) 35px 37px,
+      transparent 38px 72px
+    );
+  filter: blur(0.2px);
+  mix-blend-mode: screen;
+  opacity: 0.42;
+  animation: dashboard-rain-fall 0.72s linear infinite;
 }
 
 @keyframes dashboard-road-stream {
@@ -623,6 +648,14 @@ button:disabled {
   50% {
     transform: translateX(4%);
     opacity: 0.38;
+  }
+}
+
+@keyframes dashboard-rain-fall {
+  100% {
+    background-position:
+      -34px 78px,
+      -18px 104px;
   }
 }
 

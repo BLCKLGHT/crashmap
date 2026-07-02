@@ -229,6 +229,11 @@ export function DashboardMode({
     "--road-dark-opacity": (0.34 + getRoadFlowIntensity(location?.speed) * 0.3).toFixed(2),
   } as CSSProperties;
   const isWetRoad = currentConditions?.surfaceCondition === "wet";
+  const isRaining =
+    currentConditions?.isRaining ||
+    (typeof currentWeather?.precipitation === "number" && currentWeather.precipitation > 0) ||
+    (typeof currentWeather?.rain === "number" && currentWeather.rain > 0) ||
+    (typeof currentWeather?.showers === "number" && currentWeather.showers > 0);
   const isDarkRoad = currentConditions?.lightCondition === "dark";
 
   return (
@@ -282,7 +287,7 @@ export function DashboardMode({
       <div
         className={`dashboard-distance ${isWetRoad ? "dashboard-distance--wet" : ""} ${
           isDarkRoad ? "dashboard-distance--dark" : ""
-        }`}
+        } ${isRaining ? "dashboard-distance--rain" : ""}`}
         style={roadFlowStyle}
         aria-label={`Recommended space ${carLengths} car lengths`}
       >
