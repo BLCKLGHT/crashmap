@@ -40,6 +40,8 @@ type CompanionResponse = {
 };
 
 const MIN_REQUEST_INTERVAL_MS = 20000;
+const SILENT_AUDIO_DATA_URI =
+  "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
 
 const toVoiceWarningSettings = (
   settings: DrivingCompanionSettings,
@@ -161,10 +163,21 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   const [lastSpoken, setLastSpoken] = useState("Driving companion idle");
   const [error, setError] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const lastMessagesRef = useRef<string[]>([]);
   const lastRequestRef = useRef<{ time: number; priority: number; contextKey: string } | null>(null);
+
+  const isSupported = typeof Audio !== "undefined" && typeof URL !== "undefined";
+
+  const revokeCurrentAudioUrl = useCallback(() => {
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  }, []);
 
   const warningSettings = useMemo(() => toVoiceWarningSettings(settings), [settings]);
 
@@ -173,17 +186,48 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
     abortRef.current = null;
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = "";
-      audioRef.current = null;
+      audioRef.current.removeAttribute("src");
+      audioRef.current.load();
     }
+    revokeCurrentAudioUrl();
     setIsSpeaking(false);
-  }, []);
+  }, [revokeCurrentAudioUrl]);
+
+  const unlockAudio = useCallback(async () => {
+    if (!isSupported) {
+      setError("Audio playback is unavailable in this browser.");
+      return false;
+    }
+
+    const audio = audioRef.current ?? new Audio();
+    audioRef.current = audio;
+    audio.preload = "auto";
+    audio.volume = 0;
+    audio.src = SILENT_AUDIO_DATA_URI;
+
+    try {
+      // Mobile browsers require this to happen directly after a user tap.
+      await audio.play();
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = settings.volume;
+      setIsAudioUnlocked(true);
+      setError(null);
+      return true;
+    } catch {
+      audio.volume = settings.volume;
+      setIsAudioUnlocked(false);
+      setError("Audio playback was blocked. Tap Enable companion or Test voice while the app is open.");
+      return false;
+    }
+  }, [isSupported, settings.volume]);
 
   const requestAndPlay = useCallback(
     async (drivingContext: DrivingContextJson, priority: number, ignoreTiming = false) => {
-      if (settings.mode === "off") return;
+      if ((settings.mode === "off" && !ignoreTiming) || !isSupported) return;
 
       const now = Date.now();
+      const companionMode = settings.mode === "off" ? "normal" : settings.mode;
       const contextKey = JSON.stringify({
         trigger: drivingContext.trigger.type,
         risk: drivingContext.riskLevel,
@@ -232,7 +276,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
           signal: controller.signal,
           body: JSON.stringify({
             context: drivingContext,
-            mode: settings.mode,
+            mode: companionMode,
             voice: settings.voice,
           }),
         });
@@ -244,18 +288,22 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
 
         const payload = (await response.json()) as CompanionResponse;
         const audioUrl = base64ToAudioUrl(payload.audioBase64, payload.mimeType);
-        const audio = new Audio(audioUrl);
-        audio.volume = settings.volume;
+        const audio = audioRef.current ?? new Audio();
         audioRef.current = audio;
+        audio.pause();
+        revokeCurrentAudioUrl();
+        audio.src = audioUrl;
+        audioUrlRef.current = audioUrl;
+        audio.volume = settings.volume;
         setIsSpeaking(true);
         setLastSpoken(payload.text);
         lastMessagesRef.current = [payload.text, ...lastMessagesRef.current].slice(0, 5);
         audio.onended = () => {
-          URL.revokeObjectURL(audioUrl);
+          revokeCurrentAudioUrl();
           setIsSpeaking(false);
         };
         audio.onerror = () => {
-          URL.revokeObjectURL(audioUrl);
+          revokeCurrentAudioUrl();
           setIsSpeaking(false);
           setError("Audio playback failed.");
         };
@@ -263,10 +311,15 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       } catch (caughtError) {
         if ((caughtError as Error).name === "AbortError") return;
         setIsSpeaking(false);
-        setError(caughtError instanceof Error ? caughtError.message : "Driving companion failed.");
+        if ((caughtError as Error).name === "NotAllowedError") {
+          setIsAudioUnlocked(false);
+          setError("Audio playback was blocked. Tap Enable companion or Test voice while the app is open.");
+        } else {
+          setError(caughtError instanceof Error ? caughtError.message : "Driving companion failed.");
+        }
       }
     },
-    [isSpeaking, settings.mode, settings.voice, settings.volume, stopAudio],
+    [isSpeaking, isSupported, revokeCurrentAudioUrl, settings.mode, settings.voice, settings.volume, stopAudio],
   );
 
   useEffect(() => {
@@ -283,7 +336,8 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
 
   const enableCompanion = useCallback(() => {
     setSettings((current) => ({ ...current, mode: current.mode === "off" ? "normal" : current.mode }));
-  }, []);
+    void unlockAudio();
+  }, [unlockAudio]);
 
   const disableCompanion = useCallback(() => {
     setSettings((current) => ({ ...current, mode: "off" }));
@@ -291,37 +345,44 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   }, [stopAudio]);
 
   const testVoice = useCallback(() => {
-    void requestAndPlay(
-      {
-        speed: 78,
-        speedLimit: 80,
-        distanceToRiskMetres: 400,
-        riskLevel: "low",
-        totalCrashesAhead: 0,
-        seriousCrashesAhead: 0,
-        fatalCrashesAhead: 0,
-        weatherNow: "dry",
-        weatherMatched: false,
-        recommendedCarLengths: 6,
-        timeOfDay: "daylight",
-        roadHistoryDescription: "low",
-        lastMessages: lastMessagesRef.current,
-        trigger: { type: "calm_reminder", priority: 99, severity: "low" },
-      },
-      99,
-      true,
-    );
-  }, [requestAndPlay]);
+    void (async () => {
+      await unlockAudio();
+      await requestAndPlay(
+        {
+          speed: 78,
+          speedLimit: 80,
+          distanceToRiskMetres: 400,
+          riskLevel: "low",
+          totalCrashesAhead: 0,
+          seriousCrashesAhead: 0,
+          fatalCrashesAhead: 0,
+          weatherNow: "dry",
+          weatherMatched: false,
+          recommendedCarLengths: 6,
+          timeOfDay: "daylight",
+          roadHistoryDescription: "low",
+          lastMessages: lastMessagesRef.current,
+          trigger: { type: "calm_reminder", priority: 99, severity: "low" },
+        },
+        99,
+        true,
+      );
+    })();
+  }, [requestAndPlay, unlockAudio]);
 
   const testWarningType = useCallback(
     (type: VoiceWarningType) => {
-      void requestAndPlay(makeTestContext(type, lastMessagesRef.current), 99, true);
+      void (async () => {
+        await unlockAudio();
+        await requestAndPlay(makeTestContext(type, lastMessagesRef.current), 99, true);
+      })();
     },
-    [requestAndPlay],
+    [requestAndPlay, unlockAudio],
   );
 
   return {
-    isSupported: true,
+    isSupported,
+    isAudioUnlocked,
     settings,
     setSettings,
     enableCompanion,
@@ -333,4 +394,3 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
     isSpeaking,
   };
 }
-

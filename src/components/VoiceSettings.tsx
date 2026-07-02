@@ -13,6 +13,7 @@ type VoiceSettingsProps = {
   lastSpoken: string;
   error: string | null;
   isSpeaking: boolean;
+  isAudioUnlocked: boolean;
   onSettingsChange: (settings: DrivingCompanionSettings) => void;
   onEnable: () => void;
   onDisable: () => void;
@@ -46,6 +47,7 @@ export function VoiceSettings({
   lastSpoken,
   error,
   isSpeaking,
+  isAudioUnlocked,
   onSettingsChange,
   onEnable,
   onDisable,
@@ -154,7 +156,12 @@ export function VoiceSettings({
                 ))}
               </div>
 
-              <small>{error ?? lastSpoken}</small>
+              <small>
+                {error ??
+                  (isAudioUnlocked
+                    ? lastSpoken
+                    : "Tap Enable companion or Test voice once to allow mobile audio playback.")}
+              </small>
               <small>Uses historical road information only. It does not detect live hazards.</small>
             </>
           )}
@@ -163,4 +170,3 @@ export function VoiceSettings({
     </section>
   );
 }
-

@@ -1261,6 +1261,7 @@ function App() {
           lastSpoken={drivingCompanion.lastSpoken}
           error={drivingCompanion.error}
           isSpeaking={drivingCompanion.isSpeaking}
+          isAudioUnlocked={drivingCompanion.isAudioUnlocked}
           onSettingsChange={drivingCompanion.setSettings}
           onEnable={drivingCompanion.enableCompanion}
           onDisable={drivingCompanion.disableCompanion}
