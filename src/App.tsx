@@ -6,6 +6,7 @@ import { DashboardMode } from "./components/DashboardMode";
 import { ErrorState } from "./components/ErrorState";
 import { FilterPanel } from "./components/FilterPanel";
 import { LoadingState } from "./components/LoadingState";
+import { VoiceSettings } from "./components/VoiceSettings";
 import {
   clearCachedCrashData,
   fetchAllTasCrashData,
@@ -23,6 +24,7 @@ import {
   getDriveRiskSummary,
 } from "./data/spatialIndex";
 import { fetchCurrentWeather, getCurrentDrivingConditions } from "./data/weather";
+import { useVoiceWarnings } from "./hooks/useVoiceWarnings";
 import type {
   CrashDataState,
   CrashFilters,
@@ -34,6 +36,7 @@ import type {
   WeatherState,
 } from "./types/crash";
 import { DriveModePanel } from "./components/DriveModePanel";
+import type { VoiceWarningContext } from "./voice/voiceWarnings";
 
 type DeviceOrientationEventWithCompass = DeviceOrientationEvent & {
   webkitCompassHeading?: number;
@@ -59,6 +62,8 @@ const SIMULATION_STEP_MS = 250;
 const SIMULATION_BASE_SPEED_MPS = 13.9;
 const WEATHER_REFRESH_MS = 10 * 60 * 1000;
 const WEATHER_MOVE_REFRESH_METRES = 10000;
+const VOICE_REACTION_TIME_SECONDS = 1.5;
+const VOICE_CAR_LENGTH_METRES = 5;
 
 const SIMULATION_SPEED_SPIKES: Array<{
   segmentIndex: number;
@@ -228,6 +233,21 @@ const getOverspeedDeltaKmh = (
   const currentSpeed = Math.round(Math.max(0, speedMetresPerSecond * 3.6));
   const delta = currentSpeed - speedLimit;
   return delta > 0 ? delta : null;
+};
+
+const getReactionCarLengths = (speedMetresPerSecond?: number): number => {
+  if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) {
+    return 0;
+  }
+
+  const reactionDistance = Math.max(0, speedMetresPerSecond) * VOICE_REACTION_TIME_SECONDS;
+  if (reactionDistance <= 0) return 0;
+  return Math.max(1, Math.round(reactionDistance / VOICE_CAR_LENGTH_METRES));
+};
+
+const getVoiceSegmentKey = (location: DriveLocation | null, riskLevel: string): string => {
+  if (!location) return `no-location:${riskLevel}`;
+  return `${Math.round(location.latitude * 500)}:${Math.round(location.longitude * 500)}:${riskLevel}`;
 };
 
 const getSimulationSpeedMps = (segmentIndex: number, progress: number): number => {
@@ -942,6 +962,38 @@ function App() {
   const fatalProximityStyle = {
     "--fatal-glow-strength": fatalProximityIntensity.toFixed(3),
   } as CSSProperties;
+  const voiceContext = useMemo<VoiceWarningContext>(
+    () => ({
+      isActive: isDriveModeActive,
+      speedKmh:
+        typeof displayedDriveLocation?.speed === "number"
+          ? Math.round(Math.max(0, displayedDriveLocation.speed * 3.6))
+          : undefined,
+      speedLimitKmh: parseSpeedLimitKmh(driveRisk?.nearbySpeedZone) ?? undefined,
+      carLengths: getReactionCarLengths(displayedDriveLocation?.speed),
+      riskLevel: dashboardLookaheadRisk?.riskLevel ?? "low",
+      totalCrashCount: dashboardLookaheadRisk?.totalCrashCount ?? 0,
+      seriousCount: dashboardLookaheadRisk?.seriousCount ?? 0,
+      fatalCount: dashboardLookaheadRisk?.fatalCount ?? 0,
+      matchedCrashCount: dashboardLookaheadRisk?.matchedCrashCount ?? 0,
+      wetCrashCount: dashboardLookaheadRisk?.wetCrashCount ?? 0,
+      darkCrashCount: dashboardLookaheadRisk?.darkCrashCount ?? 0,
+      currentConditions: activeDrivingConditions,
+      lookaheadDistanceMetres: dashboardLookaheadRisk?.lookaheadDistanceMetres ?? 500,
+      segmentKey: getVoiceSegmentKey(
+        displayedDriveLocation,
+        dashboardLookaheadRisk?.riskLevel ?? "low",
+      ),
+    }),
+    [
+      activeDrivingConditions,
+      dashboardLookaheadRisk,
+      displayedDriveLocation,
+      driveRisk,
+      isDriveModeActive,
+    ],
+  );
+  const voiceWarnings = useVoiceWarnings(voiceContext);
 
   return (
     <main
@@ -1018,6 +1070,20 @@ function App() {
           Dashboard Mode
         </button>
       </div>
+
+      {isDriveModeActive && (
+        <VoiceSettings
+          isSupported={voiceWarnings.isSupported}
+          voices={voiceWarnings.voices}
+          settings={voiceWarnings.settings}
+          lastSpoken={voiceWarnings.lastSpoken}
+          onSettingsChange={voiceWarnings.setSettings}
+          onEnable={voiceWarnings.enableVoiceWarnings}
+          onDisable={voiceWarnings.disableVoiceWarnings}
+          onTestVoice={voiceWarnings.testVoice}
+          onTestWarningType={voiceWarnings.testWarningType}
+        />
+      )}
 
       <header className="top-bar app-chrome">
         <div>

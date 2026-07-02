@@ -81,6 +81,10 @@ button:disabled {
   display: none !important;
 }
 
+.app.app--chrome-hidden .voice-settings {
+  display: none !important;
+}
+
 .app.app--chrome-hidden .fullscreen-toggle {
   right: 12px;
   display: inline-flex !important;
@@ -205,6 +209,85 @@ button:disabled {
   font-size: 0.78rem;
   font-weight: 900;
   padding: 0 0.82rem;
+}
+
+.voice-settings {
+  position: absolute;
+  top: calc(max(12px, env(safe-area-inset-top)) + 3rem);
+  right: 12px;
+  z-index: 690;
+  display: grid;
+  justify-items: end;
+  gap: 0.45rem;
+  max-width: min(24rem, calc(100vw - 24px));
+}
+
+.voice-settings__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-height: 2.35rem;
+  border: 1px solid rgba(20, 34, 28, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 251, 0.94);
+  box-shadow: 0 10px 32px rgba(18, 27, 23, 0.16);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 950;
+  padding: 0 0.82rem;
+}
+
+.voice-settings__toggle.is-active {
+  background: #193d30;
+  color: #fff;
+}
+
+.voice-settings__panel {
+  display: grid;
+  gap: 0.72rem;
+  width: min(23rem, calc(100vw - 24px));
+  max-height: min(76dvh, 34rem);
+  overflow-y: auto;
+  border: 1px solid rgba(20, 34, 28, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 251, 0.97);
+  box-shadow: 0 18px 42px rgba(18, 27, 23, 0.22);
+  color: var(--ink);
+  padding: 0.9rem;
+}
+
+.voice-settings__panel p,
+.voice-settings__panel small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.voice-settings__actions,
+.voice-settings__tests {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.42rem;
+}
+
+.voice-settings__tests {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.voice-settings__checks {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.voice-settings__checks label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #36423d;
+  font-size: 0.78rem;
+  font-weight: 850;
 }
 
 .view-toggle {
@@ -1753,6 +1836,17 @@ input[type="range"] {
 }
 
 @media (max-width: 719px) and (orientation: portrait) {
+  .voice-settings {
+    top: calc(max(10px, env(safe-area-inset-top)) + 3.35rem);
+    right: auto;
+    left: max(10px, env(safe-area-inset-left));
+    justify-items: start;
+  }
+
+  .voice-settings__toggle span {
+    display: none;
+  }
+
   .fullscreen-toggle,
   .app--drive-active .fullscreen-toggle {
     top: calc(max(10px, env(safe-area-inset-top)) + 3.35rem);
