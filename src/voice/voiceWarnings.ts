@@ -11,6 +11,8 @@ export type VoiceWarningType =
   | "calm_reminder";
 
 export type VoiceIntensity = "minimal" | "normal" | "detailed";
+export type DrivingCompanionMode = "off" | "minimal" | "normal" | "coaching";
+export type DrivingCompanionVoice = "alloy" | "ash" | "ballad" | "coral" | "echo" | "sage" | "shimmer" | "verse";
 
 export type VoiceWarningSettings = {
   enabled: boolean;
@@ -20,6 +22,12 @@ export type VoiceWarningSettings = {
   muteCalmReminders: boolean;
   muteSpeedWarnings: boolean;
   muteCrashHistoryWarnings: boolean;
+};
+
+export type DrivingCompanionSettings = {
+  mode: DrivingCompanionMode;
+  voice: DrivingCompanionVoice;
+  volume: number;
 };
 
 export type VoiceWarningEvent = {
@@ -55,6 +63,12 @@ export const DEFAULT_VOICE_WARNING_SETTINGS: VoiceWarningSettings = {
   muteCalmReminders: false,
   muteSpeedWarnings: false,
   muteCrashHistoryWarnings: false,
+};
+
+export const DEFAULT_DRIVING_COMPANION_SETTINGS: DrivingCompanionSettings = {
+  mode: "normal",
+  voice: "alloy",
+  volume: 0.9,
 };
 
 export const VOICE_WARNING_COOLDOWNS: Record<VoiceWarningType, number> = {
@@ -109,14 +123,14 @@ const PHRASES: Record<VoiceWarningType, string[]> = {
 };
 
 const PRIORITY: Record<VoiceWarningType, number> = {
-  speed_warning: 20,
-  fatal_history_warning: 19,
-  crash_history_warning: 18,
-  wet_weather_match_warning: 17,
-  serious_crash_warning: 16,
-  following_distance_warning: 14,
-  dark_condition_warning: 13,
-  calm_reminder: 1,
+  speed_warning: 35,
+  fatal_history_warning: 100,
+  crash_history_warning: 80,
+  wet_weather_match_warning: 70,
+  serious_crash_warning: 65,
+  following_distance_warning: 60,
+  dark_condition_warning: 55,
+  calm_reminder: 20,
 };
 
 const phraseCursor = new Map<VoiceWarningType, number>();
@@ -175,9 +189,9 @@ const makeEvent = (
   type,
   priority:
     type === "speed_warning" && severity === "high"
-      ? 21
+      ? 95
       : type === "speed_warning" && severity === "medium"
-        ? 15
+        ? 60
         : PRIORITY[type],
   severity,
   message: message ?? pickVoicePhrase(type),
@@ -249,4 +263,3 @@ export const buildVoiceWarningEvents = (
     .filter((event) => canSpeakTypeForSettings(event.type, settings, event.severity))
     .sort((a, b) => b.priority - a.priority);
 };
-

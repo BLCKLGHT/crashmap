@@ -26,7 +26,7 @@ import {
   getCurrentDrivingConditions,
   getHistoricalWeatherForCrash,
 } from "./data/weather";
-import { useVoiceWarnings } from "./hooks/useVoiceWarnings";
+import { useDrivingCompanion } from "./hooks/useDrivingCompanion";
 import type {
   CrashDataState,
   CrashFilters,
@@ -1174,7 +1174,7 @@ function App() {
       isDriveModeActive,
     ],
   );
-  const voiceWarnings = useVoiceWarnings(voiceContext);
+  const drivingCompanion = useDrivingCompanion(voiceContext);
 
   return (
     <main
@@ -1256,15 +1256,16 @@ function App() {
 
       {isDriveModeActive && (
         <VoiceSettings
-          isSupported={voiceWarnings.isSupported}
-          voices={voiceWarnings.voices}
-          settings={voiceWarnings.settings}
-          lastSpoken={voiceWarnings.lastSpoken}
-          onSettingsChange={voiceWarnings.setSettings}
-          onEnable={voiceWarnings.enableVoiceWarnings}
-          onDisable={voiceWarnings.disableVoiceWarnings}
-          onTestVoice={voiceWarnings.testVoice}
-          onTestWarningType={voiceWarnings.testWarningType}
+          isSupported={drivingCompanion.isSupported}
+          settings={drivingCompanion.settings}
+          lastSpoken={drivingCompanion.lastSpoken}
+          error={drivingCompanion.error}
+          isSpeaking={drivingCompanion.isSpeaking}
+          onSettingsChange={drivingCompanion.setSettings}
+          onEnable={drivingCompanion.enableCompanion}
+          onDisable={drivingCompanion.disableCompanion}
+          onTestVoice={drivingCompanion.testVoice}
+          onTestWarningType={drivingCompanion.testWarningType}
         />
       )}
 

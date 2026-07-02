@@ -1,37 +1,51 @@
 import { useState } from "react";
-import { Volume2, VolumeX } from "lucide-react";
+import { Bot, Volume2, VolumeX } from "lucide-react";
 import type {
-  VoiceIntensity,
-  VoiceWarningSettings,
+  DrivingCompanionMode,
+  DrivingCompanionSettings,
+  DrivingCompanionVoice,
   VoiceWarningType,
 } from "../voice/voiceWarnings";
 
 type VoiceSettingsProps = {
   isSupported: boolean;
-  voices: SpeechSynthesisVoice[];
-  settings: VoiceWarningSettings;
+  settings: DrivingCompanionSettings;
   lastSpoken: string;
-  onSettingsChange: (settings: VoiceWarningSettings) => void;
+  error: string | null;
+  isSpeaking: boolean;
+  onSettingsChange: (settings: DrivingCompanionSettings) => void;
   onEnable: () => void;
   onDisable: () => void;
   onTestVoice: () => void;
   onTestWarningType: (type: VoiceWarningType) => void;
 };
 
+const VOICES: DrivingCompanionVoice[] = [
+  "alloy",
+  "ash",
+  "ballad",
+  "coral",
+  "echo",
+  "sage",
+  "shimmer",
+  "verse",
+];
+
 const TEST_TYPES: Array<{ type: VoiceWarningType; label: string }> = [
-  { type: "speed_warning", label: "Speed" },
-  { type: "crash_history_warning", label: "History" },
-  { type: "fatal_history_warning", label: "Fatal" },
-  { type: "wet_weather_match_warning", label: "Wet" },
-  { type: "dark_condition_warning", label: "Dark" },
-  { type: "following_distance_warning", label: "Distance" },
+  { type: "speed_warning", label: "Speeding" },
+  { type: "fatal_history_warning", label: "Fatal ahead" },
+  { type: "wet_weather_match_warning", label: "Heavy rain" },
+  { type: "wet_weather_match_warning", label: "Wet match" },
+  { type: "crash_history_warning", label: "High history" },
+  { type: "calm_reminder", label: "Quiet road" },
 ];
 
 export function VoiceSettings({
   isSupported,
-  voices,
   settings,
   lastSpoken,
+  error,
+  isSpeaking,
   onSettingsChange,
   onEnable,
   onDisable,
@@ -40,38 +54,59 @@ export function VoiceSettings({
 }: VoiceSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const updateSetting = <Key extends keyof VoiceWarningSettings>(
+  const updateSetting = <Key extends keyof DrivingCompanionSettings>(
     key: Key,
-    value: VoiceWarningSettings[Key],
+    value: DrivingCompanionSettings[Key],
   ) => {
     onSettingsChange({ ...settings, [key]: value });
   };
 
+  const isEnabled = settings.mode !== "off";
+
   return (
     <section className={`voice-settings ${isOpen ? "voice-settings--open" : ""}`}>
       <button
-        className={`voice-settings__toggle ${settings.enabled ? "is-active" : ""}`}
+        className={`voice-settings__toggle ${isEnabled ? "is-active" : ""}`}
         type="button"
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
       >
-        {settings.enabled ? <Volume2 size={17} aria-hidden="true" /> : <VolumeX size={17} aria-hidden="true" />}
-        <span>Voice</span>
+        {isEnabled ? <Volume2 size={17} aria-hidden="true" /> : <VolumeX size={17} aria-hidden="true" />}
+        <span>Companion</span>
       </button>
 
       {isOpen && (
         <div className="voice-settings__panel">
           {!isSupported ? (
-            <p>Speech synthesis is unavailable in this browser.</p>
+            <p>AI Driving Companion is unavailable in this browser.</p>
           ) : (
             <>
+              <div className="voice-settings__header">
+                <Bot size={18} aria-hidden="true" />
+                <strong>Driving Companion</strong>
+                <span>{isSpeaking ? "Speaking" : "Ready"}</span>
+              </div>
+
+              <div className="voice-settings__mode" role="radiogroup" aria-label="Driving companion mode">
+                {(["off", "minimal", "normal", "coaching"] as DrivingCompanionMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    className={settings.mode === mode ? "is-active" : ""}
+                    type="button"
+                    onClick={() => updateSetting("mode", mode)}
+                  >
+                    {mode === "off" ? "Off" : mode[0].toUpperCase() + mode.slice(1)}
+                  </button>
+                ))}
+              </div>
+
               <div className="voice-settings__actions">
                 <button
                   className="button button--primary"
                   type="button"
-                  onClick={settings.enabled ? onDisable : onEnable}
+                  onClick={isEnabled ? onDisable : onEnable}
                 >
-                  {settings.enabled ? "Disable voice" : "Enable voice warnings"}
+                  {isEnabled ? "Turn off" : "Enable companion"}
                 </button>
                 <button className="button" type="button" onClick={onTestVoice}>
                   Test voice
@@ -79,29 +114,16 @@ export function VoiceSettings({
               </div>
 
               <label className="field">
-                <span>Voice intensity</span>
+                <span>OpenAI voice</span>
                 <select
-                  value={settings.intensity}
+                  value={settings.voice}
                   onChange={(event) =>
-                    updateSetting("intensity", event.target.value as VoiceIntensity)
+                    updateSetting("voice", event.target.value as DrivingCompanionVoice)
                   }
                 >
-                  <option value="minimal">Minimal</option>
-                  <option value="normal">Normal</option>
-                  <option value="detailed">Detailed</option>
-                </select>
-              </label>
-
-              <label className="field">
-                <span>Voice type</span>
-                <select
-                  value={settings.voiceURI}
-                  onChange={(event) => updateSetting("voiceURI", event.target.value)}
-                >
-                  <option value="">Browser default</option>
-                  {voices.map((voice) => (
-                    <option key={voice.voiceURI} value={voice.voiceURI}>
-                      {voice.name} ({voice.lang})
+                  {VOICES.map((voice) => (
+                    <option key={voice} value={voice}>
+                      {voice}
                     </option>
                   ))}
                 </select>
@@ -119,39 +141,10 @@ export function VoiceSettings({
                 />
               </label>
 
-              <div className="voice-settings__checks">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={settings.muteSpeedWarnings}
-                    onChange={(event) => updateSetting("muteSpeedWarnings", event.target.checked)}
-                  />
-                  <span>Mute speed warnings</span>
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={settings.muteCrashHistoryWarnings}
-                    onChange={(event) =>
-                      updateSetting("muteCrashHistoryWarnings", event.target.checked)
-                    }
-                  />
-                  <span>Mute crash-history warnings</span>
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={settings.muteCalmReminders}
-                    onChange={(event) => updateSetting("muteCalmReminders", event.target.checked)}
-                  />
-                  <span>Mute calm reminders</span>
-                </label>
-              </div>
-
-              <div className="voice-settings__tests" aria-label="Developer voice tests">
-                {TEST_TYPES.map((test) => (
+              <div className="voice-settings__tests" aria-label="Developer companion tests">
+                {TEST_TYPES.map((test, index) => (
                   <button
-                    key={test.type}
+                    key={`${test.type}-${index}`}
                     className="button"
                     type="button"
                     onClick={() => onTestWarningType(test.type)}
@@ -161,8 +154,8 @@ export function VoiceSettings({
                 ))}
               </div>
 
-              <small>{lastSpoken}</small>
-              <small>Historical crash data only. Voice warnings are approximate.</small>
+              <small>{error ?? lastSpoken}</small>
+              <small>Uses historical road information only. It does not detect live hazards.</small>
             </>
           )}
         </div>

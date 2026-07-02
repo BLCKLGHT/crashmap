@@ -265,6 +265,47 @@ button:disabled {
   line-height: 1.35;
 }
 
+.voice-settings__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.45rem;
+  color: #193d30;
+  font-size: 0.82rem;
+  font-weight: 950;
+}
+
+.voice-settings__header span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.voice-settings__mode {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.25rem;
+}
+
+.voice-settings__mode button {
+  min-height: 2rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 950;
+}
+
+.voice-settings__mode button.is-active {
+  background: #193d30;
+  color: #fff;
+}
+
 .voice-settings__actions,
 .voice-settings__tests {
   display: grid;
