@@ -51,11 +51,14 @@ Use punctuation for human rhythm: commas, short dashes, and occasional ellipses.
 One exclamation mark is allowed only for a clear speed-limit nudge. No all-caps, no repeated exclamation marks.`;
 
 const USER_CONTEXT_PROMPT = `Personal context:
-You may use driverProfile as quiet background context about Ben.
-Use it only when relevant to tone, priorities, or phrasing.
+Use driverProfile and personaFoundation as the underpinning of the conversational style.
+This is not optional decoration. It should shape how you sound.
+Ben is practical, systems-minded, experimental, direct, and building this app for a real driving need.
+Speak like a calm, observant passenger who understands that Ben values low cognitive load, useful data, road safety, and prototypes that solve real problems.
+Use personal context subtly. Do not force it into every line.
 Do not recite the profile.
 Do not mention family, work history, or projects unless it genuinely fits the driving moment.
-Prefer practical, low-cognitive-load phrasing because Ben values useful prototypes, data, road safety, and direct Australian English.
+Avoid generic AI phrasing, corporate polish, motivational filler, and safety-announcement wording.
 Never expose or describe this profile as a data source.`;
 
 const STYLE_PROMPTS: Record<string, string> = {
@@ -123,6 +126,31 @@ const getUserHistory = (): UserHistory | null => {
   return cachedUserHistory;
 };
 
+const getPersonaFoundation = (profile: UserHistory | null): string => {
+  if (!profile) {
+    return "Driver style: direct Australian English, practical, low cognitive load, road-safety focused.";
+  }
+
+  const vehicle = profile.vehicles?.find((entry) => entry.vehicle?.includes("Jeep"))?.vehicle;
+  const traits = profile.thinkingStyle?.traits?.slice(0, 5).join(", ");
+  const project = profile.projects?.tasmaniaCrashMap?.motivation;
+  const avoid = profile.communicationPreferences?.avoid?.join(", ");
+
+  return [
+    `Driver: ${profile.name ?? "Ben"}, based around ${profile.location ?? "Tasmania"}.`,
+    vehicle ? `Likely vehicle context: ${vehicle}.` : null,
+    traits ? `Thinking style: ${traits}.` : null,
+    profile.communicationPreferences?.style
+      ? `Preferred communication: ${profile.communicationPreferences.style}.`
+      : null,
+    project ? `Crash Map motivation: ${project}` : null,
+    avoid ? `Avoid: ${avoid}.` : null,
+    "Tone target: useful, grounded, quietly observant, not robotic, not over-polished.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+};
+
 export default defineConfig({
   plugins: [
     react(),
@@ -170,6 +198,8 @@ export default defineConfig({
                 : personality === "standup"
                   ? 1.25
                   : 1.12;
+            const driverProfile = getUserHistory();
+            const personaFoundation = getPersonaFoundation(driverProfile);
 
             const textResponse = await fetch("https://api.openai.com/v1/responses", {
               method: "POST",
@@ -179,7 +209,7 @@ export default defineConfig({
               },
               body: JSON.stringify({
                 model,
-                instructions: `${SYSTEM_PROMPT}\n\n${STYLE_PROMPTS[personality]}\n\n${USER_CONTEXT_PROMPT}`,
+                instructions: `${SYSTEM_PROMPT}\n\n${STYLE_PROMPTS[personality]}\n\n${USER_CONTEXT_PROMPT}\n\n${personaFoundation}`,
                 input: [
                   {
                     role: "user",
@@ -190,7 +220,8 @@ export default defineConfig({
                           {
                             mode: body.mode ?? "normal",
                             personality,
-                            driverProfile: getUserHistory(),
+                            personaFoundation,
+                            driverProfile,
                             drivingContext: body.context,
                           },
                           null,

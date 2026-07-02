@@ -224,9 +224,9 @@ export function DashboardMode({
   const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
   const roadFlowStyle = {
     "--road-flow-duration": `${getRoadFlowDurationSeconds(location?.speed).toFixed(2)}s`,
-    "--road-flow-opacity": (0.42 + getRoadFlowIntensity(location?.speed) * 0.36).toFixed(2),
-    "--road-lane-opacity": (0.35 + getRoadFlowIntensity(location?.speed) * 0.34).toFixed(2),
-    "--road-dark-opacity": (0.34 + getRoadFlowIntensity(location?.speed) * 0.3).toFixed(2),
+    "--road-flow-opacity": (0.62 + getRoadFlowIntensity(location?.speed) * 0.28).toFixed(2),
+    "--road-lane-opacity": (0.52 + getRoadFlowIntensity(location?.speed) * 0.32).toFixed(2),
+    "--road-dark-opacity": (0.5 + getRoadFlowIntensity(location?.speed) * 0.26).toFixed(2),
   } as CSSProperties;
   const isWetRoad = currentConditions?.surfaceCondition === "wet";
   const isRaining =

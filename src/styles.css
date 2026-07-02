@@ -499,9 +499,9 @@ button:disabled {
 .dashboard-distance {
   position: relative;
   --road-flow-duration: 14s;
-  --road-flow-opacity: 0.5;
-  --road-lane-opacity: 0.43;
-  --road-dark-opacity: 0.4;
+  --road-flow-opacity: 0.72;
+  --road-lane-opacity: 0.6;
+  --road-dark-opacity: 0.56;
   display: grid;
   align-content: center;
   justify-items: center;
@@ -550,7 +550,7 @@ button:disabled {
 .dashboard-road-motion {
   position: absolute;
   inset: -44% -28% -46%;
-  z-index: 0;
+  z-index: 1;
   overflow: hidden;
   opacity: var(--road-flow-opacity);
   pointer-events: none;
@@ -561,6 +561,11 @@ button:disabled {
   inset: -72% -8% -24%;
   content: "";
   background:
+    linear-gradient(
+      180deg,
+      rgba(30, 41, 45, 0.95) 0%,
+      rgba(12, 18, 20, 0.98) 100%
+    ),
     repeating-linear-gradient(
       180deg,
       transparent 0 44px,
@@ -649,7 +654,7 @@ button:disabled {
 .dashboard-distance--rain::after {
   position: absolute;
   inset: -18% -8%;
-  z-index: 0;
+  z-index: 3;
   pointer-events: none;
   content: "";
   background:
@@ -674,6 +679,7 @@ button:disabled {
 @keyframes dashboard-road-stream {
   100% {
     background-position:
+      0 0,
       0 224px,
       0 0,
       0 0;
@@ -720,7 +726,7 @@ button:disabled {
 
 .dashboard-cars {
   position: relative;
-  z-index: 2;
+  z-index: 4;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -732,7 +738,7 @@ button:disabled {
 
 .dashboard-distance p {
   position: relative;
-  z-index: 2;
+  z-index: 4;
 }
 
 .dashboard-cars svg {
@@ -752,7 +758,7 @@ button:disabled {
 
 .dashboard-distance strong {
   position: relative;
-  z-index: 2;
+  z-index: 4;
   font-size: clamp(1.6rem, 8vw, 3.4rem);
   font-weight: 950;
   line-height: 1;
