@@ -15,7 +15,11 @@ Interpret the information instead.
 
 Keep responses one sentence, maximum 20 words, conversational, calm, varied, and human.
 Never repeat previous wording. Avoid repeating ideas already spoken recently.
-Always frame crash information as historical or recorded road history, not live crash detection.`;
+Always frame crash information as historical or recorded road history, not live crash detection.
+
+Use punctuation to guide expressive speech: commas for timing, short dashes for emphasis, and occasional ellipses for a pause.
+For speed-limit warnings, one exclamation mark is allowed when the driver is clearly over the limit.
+Do not use all-caps, repeated exclamation marks, or melodramatic wording.`;
 
 const STYLE_PROMPTS: Record<string, string> = {
   calm:
@@ -26,9 +30,9 @@ const STYLE_PROMPTS: Record<string, string> = {
 
 const TTS_INSTRUCTIONS: Record<string, string> = {
   calm:
-    "Calm, warm, conversational Australian driving companion. Slightly quicker than normal, with natural dynamic range and clear emphasis.",
+    "Calm, warm, conversational Australian driving companion. Quicker than normal, with natural dynamic range, clear emphasis, and expressive punctuation.",
   standup:
-    "Expressive Australian driving companion with dry stand-up timing, dynamic range, varied pacing, and a wry half-smile. Do not imitate any specific comedian. Keep it brief and clear.",
+    "Expressive Australian driving companion with dry stand-up timing, dynamic range, varied pacing, and a wry half-smile. Use punctuation cues for punch and rhythm. Do not imitate any specific comedian. Keep it brief and clear.",
 };
 
 const readBody = async (request: IncomingMessage): Promise<string> =>
@@ -97,10 +101,10 @@ export default async function handler(request: IncomingMessage, response: Server
     const personality = body.personality === "standup" ? "standup" : "calm";
     const speechSpeed =
       typeof body.speechSpeed === "number"
-        ? Math.min(1.25, Math.max(0.8, body.speechSpeed))
+        ? Math.min(1.5, Math.max(0.8, body.speechSpeed))
         : personality === "standup"
-          ? 1.12
-          : 1.08;
+          ? 1.25
+          : 1.12;
 
     const textResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",

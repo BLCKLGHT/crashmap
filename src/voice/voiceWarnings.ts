@@ -14,6 +14,7 @@ export type VoiceIntensity = "minimal" | "normal" | "detailed";
 export type DrivingCompanionMode = "off" | "minimal" | "normal" | "coaching";
 export type DrivingCompanionVoice = "alloy" | "ash" | "ballad" | "coral" | "echo" | "sage" | "shimmer" | "verse";
 export type DrivingCompanionPersonality = "calm" | "standup";
+export type DrivingCompanionSpeechSpeed = "normal" | "fast" | "faster";
 
 export type VoiceWarningSettings = {
   enabled: boolean;
@@ -29,6 +30,7 @@ export type DrivingCompanionSettings = {
   mode: DrivingCompanionMode;
   voice: DrivingCompanionVoice;
   personality: DrivingCompanionPersonality;
+  speechSpeed: DrivingCompanionSpeechSpeed;
   volume: number;
 };
 
@@ -71,6 +73,7 @@ export const DEFAULT_DRIVING_COMPANION_SETTINGS: DrivingCompanionSettings = {
   mode: "normal",
   voice: "alloy",
   personality: "calm",
+  speechSpeed: "fast",
   volume: 0.9,
 };
 
@@ -192,10 +195,12 @@ const makeEvent = (
   type,
   priority:
     type === "speed_warning" && severity === "high"
-      ? 95
+      ? 125
       : type === "speed_warning" && severity === "medium"
-        ? 60
-        : PRIORITY[type],
+        ? 115
+        : type === "speed_warning"
+          ? 105
+          : PRIORITY[type],
   severity,
   message: message ?? pickVoicePhrase(type),
   segmentKey,

@@ -40,8 +40,11 @@ type CompanionResponse = {
 };
 
 const MIN_REQUEST_INTERVAL_MS = 20000;
-const DEFAULT_SPEECH_SPEED = 1.08;
-const STANDUP_SPEECH_SPEED = 1.12;
+const SPEECH_SPEEDS: Record<DrivingCompanionSettings["speechSpeed"], number> = {
+  normal: 1.12,
+  fast: 1.25,
+  faster: 1.4,
+};
 const SILENT_AUDIO_DATA_URI =
   "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
 
@@ -230,6 +233,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
 
       const now = Date.now();
       const companionMode = settings.mode === "off" ? "normal" : settings.mode;
+      const isSpeedWarning = drivingContext.trigger.type === "speed_warning";
       const contextKey = JSON.stringify({
         trigger: drivingContext.trigger.type,
         risk: drivingContext.riskLevel,
@@ -256,7 +260,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       if (
         !ignoreTiming &&
         lastRequest &&
-        priority <= lastRequest.priority + 15 &&
+        priority <= lastRequest.priority + (isSpeedWarning ? 0 : 15) &&
         now - lastRequest.time < MIN_REQUEST_INTERVAL_MS
       ) {
         return;
@@ -281,8 +285,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
             mode: companionMode,
             voice: settings.voice,
             personality: settings.personality,
-            speechSpeed:
-              settings.personality === "standup" ? STANDUP_SPEECH_SPEED : DEFAULT_SPEECH_SPEED,
+            speechSpeed: SPEECH_SPEEDS[settings.speechSpeed],
           }),
         });
 
@@ -330,6 +333,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       revokeCurrentAudioUrl,
       settings.mode,
       settings.personality,
+      settings.speechSpeed,
       settings.voice,
       settings.volume,
       stopAudio,

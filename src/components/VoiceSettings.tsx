@@ -4,6 +4,7 @@ import type {
   DrivingCompanionMode,
   DrivingCompanionPersonality,
   DrivingCompanionSettings,
+  DrivingCompanionSpeechSpeed,
   DrivingCompanionVoice,
   VoiceWarningType,
 } from "../voice/voiceWarnings";
@@ -126,6 +127,23 @@ export function VoiceSettings({
                     className={settings.personality === personality ? "is-active" : ""}
                     type="button"
                     onClick={() => updateSetting("personality", personality)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="voice-settings__mode" role="radiogroup" aria-label="Driving companion voice speed">
+                {([
+                  ["normal", "Normal"],
+                  ["fast", "Fast"],
+                  ["faster", "Faster"],
+                ] as Array<[DrivingCompanionSpeechSpeed, string]>).map(([speechSpeed, label]) => (
+                  <button
+                    key={speechSpeed}
+                    className={settings.speechSpeed === speechSpeed ? "is-active" : ""}
+                    type="button"
+                    onClick={() => updateSetting("speechSpeed", speechSpeed)}
                   >
                     {label}
                   </button>
