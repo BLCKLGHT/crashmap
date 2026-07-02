@@ -26,6 +26,10 @@ type DrivingContextJson = {
   timeOfDay?: string;
   roadContext?: string;
   roadHistoryDescription: string;
+  previousRoadEvents: string[];
+  lastAcknowledgedDriverActions: string[];
+  secondsSinceLastMessage?: number;
+  driverHasSlowedDown: boolean;
   lastMessages: string[];
   trigger: {
     type: VoiceWarningType;
@@ -37,10 +41,12 @@ type DrivingContextJson = {
 type CompanionResponse = {
   text: string;
   mimeType: string;
-  audioBase64: string;
+  audioBase64?: string;
 };
 
 const MIN_REQUEST_INTERVAL_MS = 20000;
+const MIN_HUMAN_DELAY_MS = 2000;
+const MAX_HUMAN_DELAY_MS = 6000;
 const SPEECH_SPEEDS: Record<DrivingCompanionSettings["speechSpeed"], number> = {
   normal: 1.12,
   fast: 1.25,
@@ -91,6 +97,10 @@ const buildDrivingContextJson = (
   context: VoiceWarningContext,
   event: VoiceWarningEvent,
   lastMessages: string[],
+  previousRoadEvents: string[],
+  lastAcknowledgedDriverActions: string[],
+  secondsSinceLastMessage: number | undefined,
+  driverHasSlowedDown: boolean,
 ): DrivingContextJson => ({
   speed: context.speedKmh,
   speedLimit: context.speedLimitKmh,
@@ -105,6 +115,10 @@ const buildDrivingContextJson = (
   timeOfDay: context.currentConditions?.lightCondition,
   roadContext: context.roadContext,
   roadHistoryDescription: getRoadHistoryDescription(context),
+  previousRoadEvents,
+  lastAcknowledgedDriverActions,
+  secondsSinceLastMessage,
+  driverHasSlowedDown,
   lastMessages,
   trigger: {
     type: event.type,
@@ -131,6 +145,10 @@ const makeTestContext = (
     timeOfDay: "daylight",
     roadContext: "Macquarie Street near Murray Street",
     roadHistoryDescription: "a little higher than usual",
+    previousRoadEvents: ["Medium road history near Macquarie Street"],
+    lastAcknowledgedDriverActions: ["Driver eased off after the last speed note"],
+    secondsSinceLastMessage: 180,
+    driverHasSlowedDown: false,
     lastMessages,
     trigger: { type, priority: 99, severity: "medium" },
   };
@@ -176,6 +194,13 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   const audioUrlRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const lastMessagesRef = useRef<string[]>([]);
+  const previousRoadEventsRef = useRef<string[]>([]);
+  const lastAcknowledgedDriverActionsRef = useRef<string[]>([]);
+  const lastSpokenAtRef = useRef<number | null>(null);
+  const lastSpeedDeltaRef = useRef<number | null>(null);
+  const scheduledSpeechRef = useRef<{ key: string; priority: number; timeoutId: number } | null>(
+    null,
+  );
   const lastRequestRef = useRef<{ time: number; priority: number; contextKey: string } | null>(null);
 
   const isSupported = typeof Audio !== "undefined" && typeof URL !== "undefined";
@@ -192,6 +217,10 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   const stopAudio = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    if (scheduledSpeechRef.current) {
+      window.clearTimeout(scheduledSpeechRef.current.timeoutId);
+      scheduledSpeechRef.current = null;
+    }
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.removeAttribute("src");
@@ -298,6 +327,10 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         }
 
         const payload = (await response.json()) as CompanionResponse;
+        if (!payload.audioBase64 || !payload.text.trim()) {
+          setLastSpoken("Companion stayed quiet");
+          return;
+        }
         const audioUrl = base64ToAudioUrl(payload.audioBase64, payload.mimeType);
         const audio = audioRef.current ?? new Audio();
         audioRef.current = audio;
@@ -308,7 +341,18 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         audio.volume = settings.volume;
         setIsSpeaking(true);
         setLastSpoken(payload.text);
-        lastMessagesRef.current = [payload.text, ...lastMessagesRef.current].slice(0, 5);
+        lastMessagesRef.current = [payload.text, ...lastMessagesRef.current].slice(0, 20);
+        previousRoadEventsRef.current = [
+          `${drivingContext.trigger.type}: ${drivingContext.roadContext ?? drivingContext.roadHistoryDescription}`,
+          ...previousRoadEventsRef.current,
+        ].slice(0, 10);
+        if (drivingContext.driverHasSlowedDown) {
+          lastAcknowledgedDriverActionsRef.current = [
+            "Driver eased off after the previous speed note",
+            ...lastAcknowledgedDriverActionsRef.current,
+          ].slice(0, 10);
+        }
+        lastSpokenAtRef.current = Date.now();
         audio.onended = () => {
           revokeCurrentAudioUrl();
           setIsSpeaking(false);
@@ -349,11 +393,60 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
     const [event] = buildVoiceWarningEvents(context, warningSettings);
     if (!event || event.priority < getPriorityThreshold(settings.mode)) return;
 
-    void requestAndPlay(
-      buildDrivingContextJson(context, event, lastMessagesRef.current),
-      event.priority,
+    const speedDelta =
+      typeof context.speedKmh === "number" && typeof context.speedLimitKmh === "number"
+        ? context.speedKmh - context.speedLimitKmh
+        : undefined;
+    const driverHasSlowedDown =
+      typeof speedDelta === "number" &&
+      typeof lastSpeedDeltaRef.current === "number" &&
+      lastSpeedDeltaRef.current >= 3 &&
+      speedDelta < lastSpeedDeltaRef.current - 3;
+    if (typeof speedDelta === "number") lastSpeedDeltaRef.current = speedDelta;
+
+    const now = Date.now();
+    const secondsSinceLastMessage = lastSpokenAtRef.current
+      ? Math.round((now - lastSpokenAtRef.current) / 1000)
+      : undefined;
+    const contextKey = JSON.stringify({
+      event: event.type,
+      risk: context.riskLevel,
+      road: context.roadContext,
+      speedDelta: typeof speedDelta === "number" ? Math.round(speedDelta) : 0,
+    });
+    const scheduled = scheduledSpeechRef.current;
+    if (scheduled?.key === contextKey) return;
+    if (scheduled && event.priority <= scheduled.priority) return;
+    if (scheduled) window.clearTimeout(scheduled.timeoutId);
+
+    const delay =
+      MIN_HUMAN_DELAY_MS +
+      Math.round(Math.random() * (MAX_HUMAN_DELAY_MS - MIN_HUMAN_DELAY_MS));
+    const drivingContext = buildDrivingContextJson(
+      context,
+      event,
+      lastMessagesRef.current,
+      previousRoadEventsRef.current,
+      lastAcknowledgedDriverActionsRef.current,
+      secondsSinceLastMessage,
+      driverHasSlowedDown,
     );
+    const timeoutId = window.setTimeout(() => {
+      scheduledSpeechRef.current = null;
+      void requestAndPlay(drivingContext, event.priority);
+    }, delay);
+    scheduledSpeechRef.current = { key: contextKey, priority: event.priority, timeoutId };
   }, [context, requestAndPlay, settings.mode, warningSettings]);
+
+  useEffect(
+    () => () => {
+      if (scheduledSpeechRef.current) {
+        window.clearTimeout(scheduledSpeechRef.current.timeoutId);
+        scheduledSpeechRef.current = null;
+      }
+    },
+    [],
+  );
 
   const enableCompanion = useCallback(() => {
     setSettings((current) => ({ ...current, mode: current.mode === "off" ? "normal" : current.mode }));
@@ -383,6 +476,12 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
           timeOfDay: "daylight",
           roadContext: "Davey Street near the Southern Outlet",
           roadHistoryDescription: "low",
+          previousRoadEvents: previousRoadEventsRef.current,
+          lastAcknowledgedDriverActions: lastAcknowledgedDriverActionsRef.current,
+          secondsSinceLastMessage: lastSpokenAtRef.current
+            ? Math.round((Date.now() - lastSpokenAtRef.current) / 1000)
+            : undefined,
+          driverHasSlowedDown: false,
           lastMessages: lastMessagesRef.current,
           trigger: { type: "calm_reminder", priority: 99, severity: "low" },
         },

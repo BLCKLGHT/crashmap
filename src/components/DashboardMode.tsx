@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Car, CarFront, FlaskConical, Pause, Play, Square } from "lucide-react";
 import type {
   CurrentDrivingConditions,
@@ -82,6 +83,18 @@ const getCarLengths = (speedMetresPerSecond?: number): number => {
 };
 
 const getVisibleCarCount = (carLengths: number): number => Math.min(carLengths, 10);
+
+const getSpeedKmhNumber = (speedMetresPerSecond?: number): number => {
+  if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) return 0;
+  return Math.max(0, speedMetresPerSecond * 3.6);
+};
+
+const getRoadFlowDurationSeconds = (speedMetresPerSecond?: number): number => {
+  const speedKmh = getSpeedKmhNumber(speedMetresPerSecond);
+  if (speedKmh <= 1) return 14;
+  if (speedKmh >= 100) return 2.8;
+  return 14 - (speedKmh / 100) * 11.2;
+};
 
 const getRoadHistoryDistanceLabel = (lookaheadRisk: DashboardLookaheadRisk | null): string => {
   if (!lookaheadRisk || !lookaheadRisk.hasHeading || lookaheadRisk.riskLevel === "low") {
@@ -204,6 +217,10 @@ export function DashboardMode({
   const showMatchedStats = currentConditions !== null && hasConditionData;
   const weatherMatchLabel = getWeatherMatchLabel(weatherMatchStatus, lookaheadRisk);
   const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
+  const roadFlowStyle = {
+    "--road-flow-duration": `${getRoadFlowDurationSeconds(location?.speed).toFixed(2)}s`,
+  } as CSSProperties;
+  const isWetRoad = currentConditions?.surfaceCondition === "wet";
 
   return (
     <section className={`dashboard-mode dashboard-mode--${risk}`}>
@@ -253,9 +270,12 @@ export function DashboardMode({
         </div>
       </div>
 
-      <div className="dashboard-distance" aria-label={`Recommended space ${carLengths} car lengths`}>
+      <div
+        className={`dashboard-distance ${isWetRoad ? "dashboard-distance--wet" : ""}`}
+        style={roadFlowStyle}
+        aria-label={`Recommended space ${carLengths} car lengths`}
+      >
         <div className="dashboard-road-depth" aria-hidden="true">
-          <span />
           <span />
           <span />
           <span />
