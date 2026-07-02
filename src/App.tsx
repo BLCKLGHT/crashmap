@@ -13,9 +13,6 @@ import {
   readCachedCrashData,
   writeCachedCrashData,
 } from "./data/crashData";
-import {
-  filterCrashesByCurrentConditions,
-} from "./data/conditionMatching";
 import { defaultFilters, filterCrashes } from "./data/filterCrashes";
 import {
   createCrashSpatialIndex,
@@ -499,20 +496,8 @@ function App() {
     [dataState.crashes, filters],
   );
 
-  const weatherFilteredCrashes = useMemo(() => {
-    if (filters.weatherMode === "current") {
-      return filterCrashesByCurrentConditions(
-        attributeFilteredCrashes,
-        activeDrivingConditions,
-        "similar",
-      );
-    }
-
-    return attributeFilteredCrashes;
-  }, [activeDrivingConditions, attributeFilteredCrashes, filters.weatherMode]);
-
   const filteredCrashes = useMemo(() => {
-    if (!timeline) return weatherFilteredCrashes;
+    if (!timeline) return attributeFilteredCrashes;
 
     const frameStart = Math.floor(timeline.playheadTime / DAY_MS) * DAY_MS;
     const lowerTime = timeline.isPlaybackView ? frameStart : timeline.startTime;
@@ -520,11 +505,11 @@ function App() {
       ? Math.min(frameStart + DAY_MS, timeline.endTime + 1)
       : timeline.endTime;
 
-    return weatherFilteredCrashes.filter((crash) => {
+    return attributeFilteredCrashes.filter((crash) => {
       const time = getCrashTime(crash);
       return time !== null && time >= lowerTime && time < upperTime;
     });
-  }, [weatherFilteredCrashes, timeline]);
+  }, [attributeFilteredCrashes, timeline]);
 
   const crashSpatialIndex = useMemo(
     () => createCrashSpatialIndex(filteredCrashes),

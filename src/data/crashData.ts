@@ -105,7 +105,7 @@ const buildQueryUrl = (resultOffset: number): string => {
   const params = new URLSearchParams({
     where: "1=1",
     outFields:
-      "ID,VCRN,DESCRIPTION,CRASH_DATE_TIME,SEVERITY,SPEED_ZONE,SURFACE_TYPE,LIGHT_CONDITION,WEATHER_CONDITION,LOCATION_DESCRIPTION",
+      "ID,VCRN,DESCRIPTION,CRASH_DATE_TIME,SEVERITY,SPEED_ZONE,SURFACE_TYPE,LIGHT_CONDITION,LOCATION_DESCRIPTION",
     returnGeometry: "true",
     outSR: "4326",
     f: "geojson",
