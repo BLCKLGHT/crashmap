@@ -91,9 +91,14 @@ const getSpeedKmhNumber = (speedMetresPerSecond?: number): number => {
 
 const getRoadFlowDurationSeconds = (speedMetresPerSecond?: number): number => {
   const speedKmh = getSpeedKmhNumber(speedMetresPerSecond);
-  if (speedKmh <= 1) return 14;
-  if (speedKmh >= 100) return 2.8;
-  return 14 - (speedKmh / 100) * 11.2;
+  if (speedKmh <= 1) return 16;
+  if (speedKmh >= 100) return 2.4;
+  return 16 - (speedKmh / 100) * 13.6;
+};
+
+const getRoadFlowIntensity = (speedMetresPerSecond?: number): number => {
+  const speedKmh = getSpeedKmhNumber(speedMetresPerSecond);
+  return Math.min(1, Math.max(0.24, speedKmh / 100));
 };
 
 const getRoadHistoryDistanceLabel = (lookaheadRisk: DashboardLookaheadRisk | null): string => {
@@ -219,8 +224,12 @@ export function DashboardMode({
   const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
   const roadFlowStyle = {
     "--road-flow-duration": `${getRoadFlowDurationSeconds(location?.speed).toFixed(2)}s`,
+    "--road-flow-opacity": (0.42 + getRoadFlowIntensity(location?.speed) * 0.36).toFixed(2),
+    "--road-lane-opacity": (0.35 + getRoadFlowIntensity(location?.speed) * 0.34).toFixed(2),
+    "--road-dark-opacity": (0.34 + getRoadFlowIntensity(location?.speed) * 0.3).toFixed(2),
   } as CSSProperties;
   const isWetRoad = currentConditions?.surfaceCondition === "wet";
+  const isDarkRoad = currentConditions?.lightCondition === "dark";
 
   return (
     <section className={`dashboard-mode dashboard-mode--${risk}`}>
@@ -271,11 +280,13 @@ export function DashboardMode({
       </div>
 
       <div
-        className={`dashboard-distance ${isWetRoad ? "dashboard-distance--wet" : ""}`}
+        className={`dashboard-distance ${isWetRoad ? "dashboard-distance--wet" : ""} ${
+          isDarkRoad ? "dashboard-distance--dark" : ""
+        }`}
         style={roadFlowStyle}
         aria-label={`Recommended space ${carLengths} car lengths`}
       >
-        <div className="dashboard-road-depth" aria-hidden="true">
+        <div className="dashboard-road-motion" aria-hidden="true">
           <span />
           <span />
           <span />

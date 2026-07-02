@@ -499,54 +499,92 @@ button:disabled {
 .dashboard-distance {
   position: relative;
   --road-flow-duration: 14s;
+  --road-flow-opacity: 0.5;
+  --road-lane-opacity: 0.43;
+  --road-dark-opacity: 0.4;
   display: grid;
   align-content: center;
   justify-items: center;
   overflow: hidden;
   border-block: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.11), transparent 42%),
+    #101719;
   padding: 0.8rem 1rem;
   text-align: center;
 }
 
-.dashboard-road-depth {
-  position: absolute;
-  inset: -35% 19% -22%;
-  z-index: 0;
-  display: grid;
-  grid-template-rows: repeat(3, 1fr);
-  opacity: 0.26;
-  transform: perspective(9rem) rotateX(58deg);
-  transform-origin: bottom;
-  will-change: transform;
-}
-
-.dashboard-road-depth span {
-  display: block;
-  border-top: 2px solid rgba(255, 255, 255, 0.74);
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.22));
-  animation: dashboard-road-flow var(--road-flow-duration) linear infinite;
-  opacity: 0.78;
-  will-change: transform, opacity;
-}
-
-.dashboard-road-depth span:nth-child(2) {
-  animation-delay: calc(var(--road-flow-duration) * -0.33);
-}
-
-.dashboard-road-depth span:nth-child(3) {
-  animation-delay: calc(var(--road-flow-duration) * -0.66);
-}
-
-.dashboard-distance::after {
+.dashboard-road-motion {
   position: absolute;
   inset: 0;
   z-index: 0;
+  overflow: hidden;
+  opacity: var(--road-flow-opacity);
   pointer-events: none;
+}
+
+.dashboard-road-motion::before {
+  position: absolute;
+  inset: -48% 16% -18%;
   content: "";
   background:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 22px,
+      rgba(255, 255, 255, 0.18) 23px 25px,
+      transparent 26px 58px
+    ),
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  filter: blur(0.15px);
+  transform: perspective(10rem) rotateX(62deg);
+  transform-origin: bottom;
+  animation: dashboard-road-stream var(--road-flow-duration) linear infinite;
+  will-change: background-position;
+}
+
+.dashboard-road-motion::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(255, 255, 255, 0.12), transparent 42%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 34%),
-    linear-gradient(0deg, rgba(0, 0, 0, 0.22), transparent 42%);
+    linear-gradient(0deg, rgba(0, 0, 0, 0.32), transparent 46%);
+}
+
+.dashboard-road-motion span {
+  position: absolute;
+  top: -36%;
+  bottom: -18%;
+  width: 3px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.72) 0 18px,
+    transparent 18px 46px
+  );
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.26);
+  opacity: var(--road-lane-opacity);
+  transform-origin: bottom;
+  animation: dashboard-lane-flow var(--road-flow-duration) linear infinite;
+  will-change: background-position, transform;
+}
+
+.dashboard-road-motion span:nth-child(1) {
+  left: 27%;
+  transform: perspective(8rem) rotateX(58deg) rotateZ(8deg) scaleY(1.25);
+}
+
+.dashboard-road-motion span:nth-child(2) {
+  left: 50%;
+  transform: perspective(8rem) rotateX(58deg) scaleY(1.25);
+  animation-delay: calc(var(--road-flow-duration) * -0.22);
+}
+
+.dashboard-road-motion span:nth-child(3) {
+  right: 27%;
+  transform: perspective(8rem) rotateX(58deg) rotateZ(-8deg) scaleY(1.25);
+  animation-delay: calc(var(--road-flow-duration) * -0.44);
 }
 
 .dashboard-distance--wet::before {
@@ -563,19 +601,15 @@ button:disabled {
   animation: dashboard-wet-shimmer 7s ease-in-out infinite;
 }
 
-@keyframes dashboard-road-flow {
-  0% {
-    opacity: 0;
-    transform: translateY(-64%) scaleX(0.38);
-  }
-
-  34% {
-    opacity: 0.72;
-  }
-
+@keyframes dashboard-road-stream {
   100% {
-    opacity: 0;
-    transform: translateY(76%) scaleX(1.18);
+    background-position: 0 58px, 0 0;
+  }
+}
+
+@keyframes dashboard-lane-flow {
+  100% {
+    background-position: 0 92px;
   }
 }
 
@@ -590,6 +624,17 @@ button:disabled {
     transform: translateX(4%);
     opacity: 0.38;
   }
+}
+
+.dashboard-distance--dark .dashboard-road-motion {
+  opacity: var(--road-dark-opacity);
+}
+
+.dashboard-distance--dark .dashboard-road-motion::after {
+  background:
+    radial-gradient(ellipse at 50% 26%, rgba(147, 197, 253, 0.12), transparent 36%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.12), transparent 30%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.46), transparent 46%);
 }
 
 .dashboard-cars {
