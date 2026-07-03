@@ -6,7 +6,6 @@ import type {
   DashboardLookaheadRisk,
   DriveLocation,
   DriveRiskSummary,
-  HistoricalWeatherMatchState,
   WeatherState,
 } from "../types/crash";
 
@@ -21,7 +20,6 @@ type DashboardModeProps = {
   currentConditions: CurrentDrivingConditions | null;
   currentWeather: CurrentWeather | null;
   weatherStatus: WeatherState["status"];
-  weatherMatchStatus: HistoricalWeatherMatchState["status"];
   error: string | null;
   onStartDrive: () => void;
   onStartSimulation: () => void;
@@ -85,13 +83,19 @@ const getCarLengths = (speedMetresPerSecond?: number): number => {
 
 const getVisibleCarCount = (carLengths: number): number => Math.min(carLengths, 10);
 
-const getRoadHistoryDistanceLabel = (lookaheadRisk: DashboardLookaheadRisk | null): string => {
+const getRoadHistoryDistanceParts = (
+  lookaheadRisk: DashboardLookaheadRisk | null,
+): { prefix: string; value: string; unit: string } => {
   if (!lookaheadRisk || !lookaheadRisk.hasHeading || lookaheadRisk.riskLevel === "low") {
-    return `In next ${lookaheadRisk?.lookaheadDistanceMetres ?? 500} m`;
+    return {
+      prefix: "In next",
+      value: String(lookaheadRisk?.lookaheadDistanceMetres ?? 500),
+      unit: "m",
+    };
   }
 
   if (typeof lookaheadRisk.nearestCrashDistanceMetres !== "number") {
-    return `In next ${lookaheadRisk.lookaheadDistanceMetres} m`;
+    return { prefix: "In next", value: String(lookaheadRisk.lookaheadDistanceMetres), unit: "m" };
   }
 
   const roundedDistance = Math.max(
@@ -101,7 +105,7 @@ const getRoadHistoryDistanceLabel = (lookaheadRisk: DashboardLookaheadRisk | nul
       Math.ceil(lookaheadRisk.nearestCrashDistanceMetres / 10) * 10,
     ),
   );
-  return `In ${roundedDistance} m`;
+  return { prefix: "In", value: String(roundedDistance), unit: "m" };
 };
 
 const getConditionLabel = (
@@ -160,21 +164,6 @@ const getRoadHistoryHeadline = (
     : "Medium crash history";
 };
 
-const getWeatherMatchLabel = (
-  status: HistoricalWeatherMatchState["status"],
-  lookaheadRisk: DashboardLookaheadRisk | null,
-): string => {
-  if (status === "off") return "Weather match: off";
-  if (status === "checking") return "Weather match: checking";
-  if (status === "error") return "Historical weather unavailable";
-  if (status === "limited") return "Weather match: limited data";
-  if ((lookaheadRisk?.matchedCrashCount ?? 0) > 0) {
-    if ((lookaheadRisk?.wetCrashCount ?? 0) > 0) return "Weather match: wet-history match";
-    return "Weather match: similar conditions";
-  }
-  return "Weather match: no strong match";
-};
-
 export function DashboardMode({
   isActive,
   isSimulation,
@@ -186,7 +175,6 @@ export function DashboardMode({
   currentConditions,
   currentWeather,
   weatherStatus,
-  weatherMatchStatus,
   error,
   onStartDrive,
   onStartSimulation,
@@ -198,14 +186,14 @@ export function DashboardMode({
   const visibleCars = getVisibleCarCount(carLengths);
   const hasMoreCarLengths = carLengths > 10;
   const risk = lookaheadRisk?.riskLevel ?? "low";
-  const distanceLabel = getRoadHistoryDistanceLabel(lookaheadRisk);
+  const distanceParts = getRoadHistoryDistanceParts(lookaheadRisk);
+  const distanceLabel = `${distanceParts.prefix} ${distanceParts.value} ${distanceParts.unit}`;
   const historyHeadline = getRoadHistoryHeadline(lookaheadRisk, currentConditions);
   const conditionLabel = getConditionLabel(currentConditions, weatherStatus);
   const weatherDetailLabel = getWeatherDetailLabel(currentWeather, currentConditions, weatherStatus);
   const hasConditionData = lookaheadRisk?.conditionDataAvailable ?? false;
   const matchedCrashCount = lookaheadRisk?.matchedCrashCount ?? 0;
   const showMatchedStats = currentConditions !== null && hasConditionData;
-  const weatherMatchLabel = getWeatherMatchLabel(weatherMatchStatus, lookaheadRisk);
   const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
 
   return (
@@ -273,8 +261,11 @@ export function DashboardMode({
 
       <div className="dashboard-history">
         <span>Road history ahead</span>
-        <strong>{distanceLabel}</strong>
-        <p className="dashboard-history__condition">{weatherMatchLabel}</p>
+        <strong className="dashboard-history__distance" aria-label={distanceLabel}>
+          <span>{distanceParts.prefix}</span>
+          <b>{distanceParts.value}</b>
+          <em>{distanceParts.unit}</em>
+        </strong>
         <p className="dashboard-history__condition">Current condition: {conditionLabel}</p>
         {weatherDetailLabel && <p className="dashboard-history__condition">{weatherDetailLabel}</p>}
         <h2>{historyHeadline}</h2>

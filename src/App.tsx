@@ -1265,7 +1265,6 @@ function App() {
           weatherStatus={
             weatherSimulationMode === "failure" ? "error" : weatherSimulationMode === "live" ? weatherState.status : "simulated"
           }
-          weatherMatchStatus={weatherMatchStatus}
           error={driveError}
           onStartDrive={startDriveMode}
           onStartSimulation={startSimulationMode}

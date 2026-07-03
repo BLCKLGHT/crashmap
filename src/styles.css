@@ -589,6 +589,37 @@ button:disabled {
   line-height: 0.9;
 }
 
+.dashboard-history__distance {
+  display: flex;
+  align-items: baseline;
+  gap: 0.42rem;
+  margin-block: -0.1rem 0.05rem;
+}
+
+.dashboard-history__distance span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: clamp(0.9rem, 4vw, 1.25rem);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.dashboard-history__distance b {
+  color: #fff;
+  font-size: clamp(4.8rem, 27vw, 9rem);
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 0.78;
+  text-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+}
+
+.dashboard-history__distance em {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: clamp(1.35rem, 6vw, 2rem);
+  font-style: normal;
+  font-weight: 950;
+  line-height: 1;
+}
+
 .dashboard-history h2 {
   margin: 0;
   font-size: clamp(1.5rem, 7vw, 3rem);
