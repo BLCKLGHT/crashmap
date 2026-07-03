@@ -97,26 +97,68 @@ const getPriorityThreshold = (mode: DrivingCompanionSettings["mode"]): number =>
   return 60;
 };
 
-const base64ToAudioUrl = (audioBase64: string, mimeType: string): string => {
+const base64ToAudioUrl = (
+  audioBase64: string,
+  mimeType: string,
+): { url: string; byteLength: number } => {
   const byteCharacters = atob(audioBase64);
   const bytes = new Uint8Array(byteCharacters.length);
   for (let index = 0; index < byteCharacters.length; index += 1) {
     bytes[index] = byteCharacters.charCodeAt(index);
   }
-  return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  return {
+    url: URL.createObjectURL(new Blob([bytes], { type: mimeType })),
+    byteLength: bytes.byteLength,
+  };
 };
 
-const configureMusicFriendlyAudioSession = (): boolean => {
+const configureReliableAudioSession = (): boolean => {
   const audioSession = (navigator as NavigatorWithAudioSession).audioSession;
   if (!audioSession || !("type" in audioSession)) return false;
 
   try {
-    audioSession.type = "ambient";
-    return audioSession.type === "ambient";
+    // iOS can make "ambient" audio obey the silent switch, which looks like
+    // playback succeeded while producing no audible voice. "playback" is more
+    // reliable for a driver-facing prompt.
+    audioSession.type = "playback";
+    return audioSession.type === "playback";
   } catch {
     return false;
   }
 };
+
+const waitForAudioReady = (audio: HTMLAudioElement, timeoutMs = 5000): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      resolve();
+      return;
+    }
+
+    let timeoutId: number | undefined;
+
+    const cleanup = () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      audio.removeEventListener("loadeddata", handleReady);
+      audio.removeEventListener("canplay", handleReady);
+      audio.removeEventListener("error", handleError);
+    };
+    const handleReady = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error("Audio failed to load."));
+    };
+
+    timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Audio did not load in time."));
+    }, timeoutMs);
+    audio.addEventListener("loadeddata", handleReady, { once: true });
+    audio.addEventListener("canplay", handleReady, { once: true });
+    audio.addEventListener("error", handleError, { once: true });
+  });
 
 const getRoadHistoryDescription = (context: VoiceWarningContext): string => {
   if (context.riskLevel === "high") return "higher than normal";
@@ -305,11 +347,12 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       return false;
     }
 
-    configureMusicFriendlyAudioSession();
+    configureReliableAudioSession();
 
     const audio = audioRef.current ?? new Audio();
     audioRef.current = audio;
     audio.preload = "auto";
+    audio.muted = false;
     audio.volume = 0;
     audio.src = SILENT_AUDIO_DATA_URI;
 
@@ -423,16 +466,22 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         }
         setDebugStatus("Generating audio");
         logVoice("tts audio received", { text: payload.text });
-        const audioUrl = base64ToAudioUrl(payload.audioBase64, payload.mimeType);
+        const { url: audioUrl, byteLength } = base64ToAudioUrl(
+          payload.audioBase64,
+          payload.mimeType,
+        );
         const audio = audioRef.current ?? new Audio();
-        configureMusicFriendlyAudioSession();
+        configureReliableAudioSession();
         audioRef.current = audio;
         audio.pause();
         revokeCurrentAudioUrl();
+        audio.preload = "auto";
+        audio.autoplay = false;
+        audio.muted = false;
         audio.src = audioUrl;
         audioUrlRef.current = audioUrl;
         audio.volume = settings.volume;
-        setIsSpeaking(true);
+        audio.currentTime = 0;
         setLastSpoken(payload.text);
         lastMessagesRef.current = [payload.text, ...lastMessagesRef.current].slice(0, 20);
         previousRoadEventsRef.current = [
@@ -446,6 +495,25 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
           ].slice(0, 10);
         }
         lastSpokenAtRef.current = Date.now();
+        audio.onloadeddata = () => {
+          logVoice("audio loaded", {
+            bytes: byteLength,
+            duration: Number.isFinite(audio.duration) ? audio.duration : undefined,
+            readyState: audio.readyState,
+          });
+        };
+        audio.onplaying = () => {
+          setIsSpeaking(true);
+          setDebugStatus("Playing");
+          logVoice("playback started", {
+            currentTime: audio.currentTime,
+            readyState: audio.readyState,
+            volume: audio.volume,
+            muted: audio.muted,
+          });
+        };
+        audio.onwaiting = () => logVoice("audio waiting", { readyState: audio.readyState });
+        audio.onstalled = () => logVoice("audio stalled", { readyState: audio.readyState });
         audio.onended = () => {
           revokeCurrentAudioUrl();
           setIsSpeaking(false);
@@ -458,6 +526,8 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
           setDebugStatus("Failed to play");
           setError("Audio playback failed.");
         };
+        audio.load();
+        await waitForAudioReady(audio);
         try {
           await audio.play();
         } catch (playError) {
@@ -465,8 +535,13 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
           await new Promise((resolve) => window.setTimeout(resolve, 250));
           await audio.play();
         }
-        setDebugStatus("Playing");
-        logVoice("playback started");
+        if (audio.paused) {
+          throw new Error("Audio playback did not start.");
+        }
+        if (!isSpeaking) {
+          setIsSpeaking(true);
+          setDebugStatus("Playing");
+        }
       } catch (caughtError) {
         if ((caughtError as Error).name === "AbortError") return;
         setIsSpeaking(false);
