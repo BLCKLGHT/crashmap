@@ -1,8 +1,8 @@
-import type { CSSProperties } from "react";
 import { Car, CarFront, FlaskConical, Pause, Play, Square } from "lucide-react";
 import type {
   CurrentDrivingConditions,
   CurrentWeather,
+  DashboardDrivingState,
   DashboardLookaheadRisk,
   DriveLocation,
   DriveRiskSummary,
@@ -17,6 +17,7 @@ type DashboardModeProps = {
   location: DriveLocation | null;
   driveRisk: DriveRiskSummary | null;
   lookaheadRisk: DashboardLookaheadRisk | null;
+  drivingState: DashboardDrivingState;
   currentConditions: CurrentDrivingConditions | null;
   currentWeather: CurrentWeather | null;
   weatherStatus: WeatherState["status"];
@@ -83,23 +84,6 @@ const getCarLengths = (speedMetresPerSecond?: number): number => {
 };
 
 const getVisibleCarCount = (carLengths: number): number => Math.min(carLengths, 10);
-
-const getSpeedKmhNumber = (speedMetresPerSecond?: number): number => {
-  if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) return 0;
-  return Math.max(0, speedMetresPerSecond * 3.6);
-};
-
-const getRoadFlowDurationSeconds = (speedMetresPerSecond?: number): number => {
-  const speedKmh = getSpeedKmhNumber(speedMetresPerSecond);
-  if (speedKmh <= 1) return 11;
-  if (speedKmh >= 110) return 1.8;
-  return 11 - (speedKmh / 110) * 9.2;
-};
-
-const getRoadFlowIntensity = (speedMetresPerSecond?: number): number => {
-  const speedKmh = getSpeedKmhNumber(speedMetresPerSecond);
-  return Math.min(1, Math.max(0.24, speedKmh / 100));
-};
 
 const getRoadHistoryDistanceLabel = (lookaheadRisk: DashboardLookaheadRisk | null): string => {
   if (!lookaheadRisk || !lookaheadRisk.hasHeading || lookaheadRisk.riskLevel === "low") {
@@ -198,6 +182,7 @@ export function DashboardMode({
   location,
   driveRisk,
   lookaheadRisk,
+  drivingState,
   currentConditions,
   currentWeather,
   weatherStatus,
@@ -209,7 +194,7 @@ export function DashboardMode({
   onStopDrive,
 }: DashboardModeProps) {
   const speedZone = formatSpeedZone(driveRisk?.nearbySpeedZone);
-  const carLengths = getCarLengths(location?.speed);
+  const carLengths = drivingState.recommendedCarLengths;
   const visibleCars = getVisibleCarCount(carLengths);
   const hasMoreCarLengths = carLengths > 10;
   const risk = lookaheadRisk?.riskLevel ?? "low";
@@ -222,27 +207,6 @@ export function DashboardMode({
   const showMatchedStats = currentConditions !== null && hasConditionData;
   const weatherMatchLabel = getWeatherMatchLabel(weatherMatchStatus, lookaheadRisk);
   const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
-  const roadFlowStyle = {
-    "--road-flow-duration": `${getRoadFlowDurationSeconds(location?.speed).toFixed(2)}s`,
-    "--road-flow-opacity": (0.62 + getRoadFlowIntensity(location?.speed) * 0.28).toFixed(2),
-    "--road-lane-opacity": (0.52 + getRoadFlowIntensity(location?.speed) * 0.32).toFixed(2),
-    "--road-dark-opacity": (0.5 + getRoadFlowIntensity(location?.speed) * 0.26).toFixed(2),
-  } as CSSProperties;
-  const isWetRoad = currentConditions?.surfaceCondition === "wet";
-  const isRaining =
-    currentConditions?.isRaining ||
-    (typeof currentWeather?.precipitation === "number" && currentWeather.precipitation > 0) ||
-    (typeof currentWeather?.rain === "number" && currentWeather.rain > 0) ||
-    (typeof currentWeather?.showers === "number" && currentWeather.showers > 0);
-  const isDarkRoad = currentConditions?.lightCondition === "dark";
-  const skyClass =
-    currentConditions?.lightCondition === "dark"
-      ? "dashboard-distance--sky-night"
-      : currentConditions?.lightCondition === "dawn_dusk"
-        ? "dashboard-distance--sky-dusk"
-        : isWetRoad || isRaining
-          ? "dashboard-distance--sky-rain"
-          : "dashboard-distance--sky-day";
 
   return (
     <section className={`dashboard-mode dashboard-mode--${risk}`}>
@@ -293,25 +257,18 @@ export function DashboardMode({
       </div>
 
       <div
-        className={`dashboard-distance ${skyClass} ${isWetRoad ? "dashboard-distance--wet" : ""} ${
-          isDarkRoad ? "dashboard-distance--dark" : ""
-        } ${isRaining ? "dashboard-distance--rain" : ""}`}
-        style={roadFlowStyle}
+        className="dashboard-distance"
         aria-label={`Recommended space ${carLengths} car lengths`}
       >
-        <div className="dashboard-road-motion" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
+        <strong className="dashboard-distance__number">{carLengths || "--"}</strong>
+        <span className="dashboard-distance__unit">car lengths</span>
+        <p>recommended space at current speed</p>
         <div className="dashboard-cars" aria-hidden="true">
           {Array.from({ length: visibleCars }).map((_, index) => (
             <Car key={index} size={44} strokeWidth={2.35} />
           ))}
           {hasMoreCarLengths && <span className="dashboard-cars__plus">+</span>}
         </div>
-        <p>Recommended space</p>
-        <strong>{carLengths || "--"} car lengths</strong>
       </div>
 
       <div className="dashboard-history">

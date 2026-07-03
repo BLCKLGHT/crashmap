@@ -11,6 +11,16 @@ import type {
   VoiceWarningType,
 } from "../voice/voiceWarnings";
 
+type VoiceDebugStatus =
+  | "Voice ready"
+  | "Waiting for user enable gesture"
+  | "Generating message"
+  | "Generating audio"
+  | "Playing"
+  | "Suppressed by cooldown"
+  | "Failed to play"
+  | "Offline / network error";
+
 type DrivingContextJson = {
   speed?: number;
   speedLimit?: number;
@@ -26,6 +36,7 @@ type DrivingContextJson = {
   timeOfDay?: string;
   roadContext?: string;
   roadHistoryDescription: string;
+  dashboardDrivingState: VoiceWarningContext["dashboardDrivingState"];
   previousRoadEvents: string[];
   lastAcknowledgedDriverActions: string[];
   secondsSinceLastMessage?: number;
@@ -51,6 +62,8 @@ type NavigatorWithAudioSession = Navigator & {
 };
 
 const MIN_REQUEST_INTERVAL_MS = 20000;
+const MAX_LOCATION_AGE_MS = 3000;
+const MAX_RISK_AGE_MS = 5000;
 const MIN_HUMAN_DELAY_MS = 2000;
 const MAX_HUMAN_DELAY_MS = 6000;
 const SPEECH_SPEEDS: Record<DrivingCompanionSettings["speechSpeed"], number> = {
@@ -133,6 +146,7 @@ const buildDrivingContextJson = (
   timeOfDay: context.currentConditions?.lightCondition,
   roadContext: context.roadContext,
   roadHistoryDescription: getRoadHistoryDescription(context),
+  dashboardDrivingState: context.dashboardDrivingState,
   previousRoadEvents,
   lastAcknowledgedDriverActions,
   secondsSinceLastMessage,
@@ -163,6 +177,21 @@ const makeTestContext = (
     timeOfDay: "daylight",
     roadContext: "Macquarie Street near Murray Street",
     roadHistoryDescription: "a little higher than usual",
+    dashboardDrivingState: {
+      currentSpeed: 82,
+      speedLimit: 80,
+      recommendedCarLengths: 7,
+      currentWarningLevel: "medium" as const,
+      currentWarningColour: "orange" as const,
+      upcomingWarningLevel: "medium" as const,
+      upcomingWarningColour: "orange" as const,
+      distanceToUpcomingWarningMetres: 280,
+      upcomingZoneType: "section" as const,
+      optionalLandmark: "Macquarie Street near Murray Street",
+      heading: 180,
+      locationTimestamp: Date.now(),
+      riskTimestamp: Date.now(),
+    },
     previousRoadEvents: ["Medium road history near Macquarie Street"],
     lastAcknowledgedDriverActions: ["Driver eased off after the last speed note"],
     secondsSinceLastMessage: 180,
@@ -208,6 +237,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   const [error, setError] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
+  const [debugStatus, setDebugStatus] = useState<VoiceDebugStatus>("Waiting for user enable gesture");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -219,6 +249,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   const scheduledSpeechRef = useRef<{ key: string; priority: number; timeoutId: number } | null>(
     null,
   );
+  const latestContextRef = useRef(context);
   const lastRequestRef = useRef<{ time: number; priority: number; contextKey: string } | null>(null);
 
   const isSupported = typeof Audio !== "undefined" && typeof URL !== "undefined";
@@ -231,6 +262,26 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   }, []);
 
   const warningSettings = useMemo(() => toVoiceWarningSettings(settings), [settings]);
+
+  const logVoice = useCallback((message: string, payload?: unknown) => {
+    if (import.meta.env.DEV) console.debug(`[voice] ${message}`, payload ?? "");
+  }, []);
+
+  const isContextFresh = useCallback((candidate: VoiceWarningContext): boolean => {
+    const now = Date.now();
+    const { locationTimestamp, riskTimestamp, distanceToUpcomingWarningMetres } =
+      candidate.dashboardDrivingState;
+    if (locationTimestamp && now - locationTimestamp > MAX_LOCATION_AGE_MS) return false;
+    if (riskTimestamp && now - riskTimestamp > MAX_RISK_AGE_MS) return false;
+    if (
+      typeof distanceToUpcomingWarningMetres === "number" &&
+      distanceToUpcomingWarningMetres <= 5 &&
+      candidate.dashboardDrivingState.upcomingWarningLevel !== "high"
+    ) {
+      return false;
+    }
+    return true;
+  }, []);
 
   const stopAudio = useCallback(() => {
     abortRef.current?.abort();
@@ -269,11 +320,13 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       audio.currentTime = 0;
       audio.volume = settings.volume;
       setIsAudioUnlocked(true);
+      setDebugStatus("Voice ready");
       setError(null);
       return true;
     } catch {
       audio.volume = settings.volume;
       setIsAudioUnlocked(false);
+      setDebugStatus("Waiting for user enable gesture");
       setError("Audio playback was blocked. Tap Enable companion or Test voice while the app is open.");
       return false;
     }
@@ -282,6 +335,11 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   const requestAndPlay = useCallback(
     async (drivingContext: DrivingContextJson, priority: number, ignoreTiming = false) => {
       if ((settings.mode === "off" && !ignoreTiming) || !isSupported) return;
+      if (!ignoreTiming && !isContextFresh(latestContextRef.current)) {
+        setDebugStatus("Suppressed by cooldown");
+        logVoice("suppressed stale dashboard/location state", latestContextRef.current.dashboardDrivingState);
+        return;
+      }
 
       const now = Date.now();
       const companionMode = settings.mode === "off" ? "normal" : settings.mode;
@@ -306,6 +364,8 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         contextKey === lastRequest.contextKey &&
         now - lastRequest.time < 120000
       ) {
+        setDebugStatus("Suppressed by cooldown");
+        logVoice("suppressed duplicate context", { contextKey });
         return;
       }
 
@@ -315,13 +375,21 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         priority <= lastRequest.priority + (isSpeedWarning ? 0 : 15) &&
         now - lastRequest.time < MIN_REQUEST_INTERVAL_MS
       ) {
+        setDebugStatus("Suppressed by cooldown");
+        logVoice("suppressed recent lower-priority event", { priority, lastRequest });
         return;
       }
 
-      if (isSpeaking && lastRequest && priority <= lastRequest.priority) return;
+      if (isSpeaking && lastRequest && priority <= lastRequest.priority) {
+        setDebugStatus("Suppressed by cooldown");
+        logVoice("suppressed overlapping lower-priority audio", { priority, lastRequest });
+        return;
+      }
 
       stopAudio();
       setError(null);
+      setDebugStatus("Generating message");
+      logVoice("calling OpenAI", drivingContext.dashboardDrivingState);
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -348,9 +416,13 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
 
         const payload = (await response.json()) as CompanionResponse;
         if (!payload.audioBase64 || !payload.text.trim()) {
+          setDebugStatus("Voice ready");
           setLastSpoken("Companion stayed quiet");
+          logVoice("model returned silence");
           return;
         }
+        setDebugStatus("Generating audio");
+        logVoice("tts audio received", { text: payload.text });
         const audioUrl = base64ToAudioUrl(payload.audioBase64, payload.mimeType);
         const audio = audioRef.current ?? new Audio();
         configureMusicFriendlyAudioSession();
@@ -377,27 +449,50 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         audio.onended = () => {
           revokeCurrentAudioUrl();
           setIsSpeaking(false);
+          setDebugStatus("Voice ready");
+          logVoice("playback finished");
         };
         audio.onerror = () => {
           revokeCurrentAudioUrl();
           setIsSpeaking(false);
+          setDebugStatus("Failed to play");
           setError("Audio playback failed.");
         };
-        await audio.play();
+        try {
+          await audio.play();
+        } catch (playError) {
+          logVoice("audio play failed, retrying once", playError);
+          await new Promise((resolve) => window.setTimeout(resolve, 250));
+          await audio.play();
+        }
+        setDebugStatus("Playing");
+        logVoice("playback started");
       } catch (caughtError) {
         if ((caughtError as Error).name === "AbortError") return;
         setIsSpeaking(false);
         if ((caughtError as Error).name === "NotAllowedError") {
           setIsAudioUnlocked(false);
-          setError("Audio playback was blocked. Tap Enable companion or Test voice while the app is open.");
+          setDebugStatus("Waiting for user enable gesture");
+          if (import.meta.env.DEV) {
+            setError("Audio playback was blocked. Tap Enable companion or Test voice while the app is open.");
+          }
+        } else if (!navigator.onLine) {
+          setDebugStatus("Offline / network error");
+          if (import.meta.env.DEV) setError("Offline / network error");
         } else {
-          setError(caughtError instanceof Error ? caughtError.message : "Driving companion failed.");
+          setDebugStatus("Failed to play");
+          if (import.meta.env.DEV) {
+            setError(caughtError instanceof Error ? caughtError.message : "Driving companion failed.");
+          }
         }
+        logVoice("voice failed", caughtError);
       }
     },
     [
+      isContextFresh,
       isSpeaking,
       isSupported,
+      logVoice,
       revokeCurrentAudioUrl,
       settings.mode,
       settings.personality,
@@ -409,10 +504,17 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   );
 
   useEffect(() => {
+    latestContextRef.current = context;
     if (!context.isActive || settings.mode === "off") return;
 
     const [event] = buildVoiceWarningEvents(context, warningSettings);
     if (!event || event.priority < getPriorityThreshold(settings.mode)) return;
+    logVoice("voice event created", event);
+    if (!isContextFresh(context)) {
+      setDebugStatus("Suppressed by cooldown");
+      logVoice("suppressed stale event", context.dashboardDrivingState);
+      return;
+    }
 
     const speedDelta =
       typeof context.speedKmh === "number" && typeof context.speedLimitKmh === "number"
@@ -454,10 +556,15 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
     );
     const timeoutId = window.setTimeout(() => {
       scheduledSpeechRef.current = null;
+      if (!isContextFresh(latestContextRef.current)) {
+        setDebugStatus("Suppressed by cooldown");
+        logVoice("cancelled delayed event after vehicle moved on", latestContextRef.current.dashboardDrivingState);
+        return;
+      }
       void requestAndPlay(drivingContext, event.priority);
     }, delay);
     scheduledSpeechRef.current = { key: contextKey, priority: event.priority, timeoutId };
-  }, [context, requestAndPlay, settings.mode, warningSettings]);
+  }, [context, isContextFresh, logVoice, requestAndPlay, settings.mode, warningSettings]);
 
   useEffect(
     () => () => {
@@ -497,6 +604,21 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
           timeOfDay: "daylight",
           roadContext: "Davey Street near the Southern Outlet",
           roadHistoryDescription: "low",
+          dashboardDrivingState: {
+            currentSpeed: 78,
+            speedLimit: 80,
+            recommendedCarLengths: 6,
+            currentWarningLevel: "low",
+            currentWarningColour: "blue",
+            upcomingWarningLevel: "low",
+            upcomingWarningColour: "blue",
+            distanceToUpcomingWarningMetres: 400,
+            upcomingZoneType: "section",
+            optionalLandmark: "Davey Street near the Southern Outlet",
+            heading: 180,
+            locationTimestamp: Date.now(),
+            riskTimestamp: Date.now(),
+          },
           previousRoadEvents: previousRoadEventsRef.current,
           lastAcknowledgedDriverActions: lastAcknowledgedDriverActionsRef.current,
           secondsSinceLastMessage: lastSpokenAtRef.current
@@ -534,5 +656,6 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
     lastSpoken,
     error,
     isSpeaking,
+    debugStatus,
   };
 }

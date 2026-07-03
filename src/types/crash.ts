@@ -138,6 +138,24 @@ export type DriveRiskSummary = {
 };
 
 export type DashboardCrashRiskLevel = "low" | "medium" | "high";
+export type DashboardWarningColour = "blue" | "orange" | "red";
+export type DashboardZoneType = "corner" | "section" | "straight" | "intersection" | "unknown";
+
+export type DashboardDrivingState = {
+  currentSpeed?: number;
+  speedLimit?: number;
+  recommendedCarLengths: number;
+  currentWarningLevel: DashboardCrashRiskLevel;
+  currentWarningColour: DashboardWarningColour;
+  upcomingWarningLevel: DashboardCrashRiskLevel;
+  upcomingWarningColour: DashboardWarningColour;
+  distanceToUpcomingWarningMetres?: number;
+  upcomingZoneType: DashboardZoneType;
+  optionalLandmark?: string;
+  heading?: number;
+  locationTimestamp?: number;
+  riskTimestamp?: number;
+};
 
 export type DashboardLookaheadRisk = {
   lookaheadDistanceMetres: number;

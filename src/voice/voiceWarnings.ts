@@ -1,4 +1,8 @@
-import type { CurrentDrivingConditions, DashboardCrashRiskLevel } from "../types/crash";
+import type {
+  CurrentDrivingConditions,
+  DashboardCrashRiskLevel,
+  DashboardDrivingState,
+} from "../types/crash";
 
 export type VoiceWarningType =
   | "speed_warning"
@@ -55,6 +59,7 @@ export type VoiceWarningContext = {
   wetCrashCount: number;
   darkCrashCount: number;
   currentConditions: CurrentDrivingConditions | null;
+  dashboardDrivingState: DashboardDrivingState;
   lookaheadDistanceMetres: number;
   roadContext?: string;
   segmentKey: string;
@@ -101,26 +106,26 @@ const PHRASES: Record<VoiceWarningType, string[]> = {
     "Wet road. Leave more room than usual.",
   ],
   crash_history_warning: [
-    "There’s a bit more crash history through this section.",
-    "Take it steady here. This section has a higher recorded crash history.",
-    "This next section has a heavier crash history than usual.",
+    "There’s an orange section coming up.",
+    "Ease into this next warning section.",
+    "The dashboard’s picking up a warning area ahead.",
   ],
   fatal_history_warning: [
-    "A fatal crash has been recorded along this stretch. Stay focused here.",
-    "There’s a fatal crash recorded ahead on this section. Take it steady.",
+    "There’s a red area just ahead.",
+    "That red section is coming up now.",
   ],
   serious_crash_warning: [
-    "There are serious crashes recorded through this section.",
-    "This stretch has a history of serious crashes.",
+    "That warning section is just ahead.",
+    "Take this next section smoothly.",
   ],
   wet_weather_match_warning: [
-    "Wet conditions match previous crashes through this section.",
-    "This road has wet-weather crash history. Give yourself more space.",
-    "Rain has matched the conditions of previous crashes along this stretch.",
+    "Looks wet through this next section.",
+    "I’d give yourself a bit more room here.",
+    "Road’s probably a bit greasy through here.",
   ],
   dark_condition_warning: [
-    "This section has night-time crash history. Stay alert.",
-    "In dark conditions, this stretch has recorded crashes before.",
+    "This next section’s darker than it looks.",
+    "Ease into the next section.",
   ],
   calm_reminder: [
     "Road history looks low through here.",

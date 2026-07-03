@@ -32,6 +32,10 @@ import type {
   CrashFilters,
   CrashRecord,
   CurrentDrivingConditions,
+  DashboardCrashRiskLevel,
+  DashboardDrivingState,
+  DashboardWarningColour,
+  DashboardZoneType,
   DriveLocation,
   HistoricalWeatherMatchState,
   TimelineState,
@@ -262,6 +266,24 @@ const getReactionCarLengths = (speedMetresPerSecond?: number): number => {
 const getVoiceSegmentKey = (location: DriveLocation | null, riskLevel: string): string => {
   if (!location) return `no-location:${riskLevel}`;
   return `${Math.round(location.latitude * 500)}:${Math.round(location.longitude * 500)}:${riskLevel}`;
+};
+
+const getWarningColour = (level: DashboardCrashRiskLevel): DashboardWarningColour => {
+  if (level === "high") return "red";
+  if (level === "medium") return "orange";
+  return "blue";
+};
+
+const getZoneType = (roadContext?: string): DashboardZoneType => {
+  if (!roadContext) return "section";
+  if (/(intersection|junction|roundabout| at | near )/i.test(roadContext)) return "intersection";
+  if (/(bend|corner|curve)/i.test(roadContext)) return "corner";
+  return "section";
+};
+
+const getOptionalLandmark = (roadContext?: string): string | undefined => {
+  if (!roadContext || !/( at | near |intersection|junction|roundabout)/i.test(roadContext)) return undefined;
+  return roadContext.length > 64 ? `${roadContext.slice(0, 61).trim()}...` : roadContext;
 };
 
 const getSimulationSpeedMps = (segmentIndex: number, progress: number): number => {
@@ -1136,15 +1158,40 @@ function App() {
           ? "ready"
           : "limited"
         : historicalWeatherMatchState.status;
+  const dashboardDrivingState = useMemo<DashboardDrivingState>(() => {
+    const currentSpeed =
+      typeof displayedDriveLocation?.speed === "number"
+        ? Math.round(Math.max(0, displayedDriveLocation.speed * 3.6))
+        : undefined;
+    const speedLimit = parseSpeedLimitKmh(driveRisk?.nearbySpeedZone) ?? undefined;
+    const level = dashboardLookaheadRisk?.riskLevel ?? "low";
+    const distance =
+      typeof dashboardLookaheadRisk?.nearestCrashDistanceMetres === "number"
+        ? Math.max(0, Math.round(dashboardLookaheadRisk.nearestCrashDistanceMetres))
+        : dashboardLookaheadRisk?.lookaheadDistanceMetres;
+
+    return {
+      currentSpeed,
+      speedLimit,
+      recommendedCarLengths: getReactionCarLengths(displayedDriveLocation?.speed),
+      currentWarningLevel: level,
+      currentWarningColour: getWarningColour(level),
+      upcomingWarningLevel: level,
+      upcomingWarningColour: getWarningColour(level),
+      distanceToUpcomingWarningMetres: distance,
+      upcomingZoneType: getZoneType(dashboardLookaheadRisk?.roadContext),
+      optionalLandmark: getOptionalLandmark(dashboardLookaheadRisk?.roadContext),
+      heading: displayedDriveLocation?.heading,
+      locationTimestamp: displayedDriveLocation?.timestamp,
+      riskTimestamp: dashboardLookaheadRisk ? Date.now() : undefined,
+    };
+  }, [dashboardLookaheadRisk, displayedDriveLocation, driveRisk?.nearbySpeedZone]);
   const voiceContext = useMemo<VoiceWarningContext>(
     () => ({
       isActive: isDriveModeActive,
-      speedKmh:
-        typeof displayedDriveLocation?.speed === "number"
-          ? Math.round(Math.max(0, displayedDriveLocation.speed * 3.6))
-          : undefined,
-      speedLimitKmh: parseSpeedLimitKmh(driveRisk?.nearbySpeedZone) ?? undefined,
-      carLengths: getReactionCarLengths(displayedDriveLocation?.speed),
+      speedKmh: dashboardDrivingState.currentSpeed,
+      speedLimitKmh: dashboardDrivingState.speedLimit,
+      carLengths: dashboardDrivingState.recommendedCarLengths,
       riskLevel: dashboardLookaheadRisk?.riskLevel ?? "low",
       totalCrashCount: dashboardLookaheadRisk?.totalCrashCount ?? 0,
       seriousCount: dashboardLookaheadRisk?.seriousCount ?? 0,
@@ -1153,6 +1200,7 @@ function App() {
       wetCrashCount: dashboardLookaheadRisk?.wetCrashCount ?? 0,
       darkCrashCount: dashboardLookaheadRisk?.darkCrashCount ?? 0,
       currentConditions: activeDrivingConditions,
+      dashboardDrivingState,
       lookaheadDistanceMetres: dashboardLookaheadRisk?.lookaheadDistanceMetres ?? 500,
       roadContext: dashboardLookaheadRisk?.roadContext,
       segmentKey: getVoiceSegmentKey(
@@ -1162,9 +1210,9 @@ function App() {
     }),
     [
       activeDrivingConditions,
+      dashboardDrivingState,
       dashboardLookaheadRisk,
       displayedDriveLocation,
-      driveRisk,
       isDriveModeActive,
     ],
   );
@@ -1211,6 +1259,7 @@ function App() {
           location={displayedDriveLocation}
           driveRisk={driveRisk}
           lookaheadRisk={dashboardLookaheadRisk}
+          drivingState={dashboardDrivingState}
           currentConditions={activeDrivingConditions}
           currentWeather={weatherState.weather}
           weatherStatus={
@@ -1257,6 +1306,7 @@ function App() {
           error={drivingCompanion.error}
           isSpeaking={drivingCompanion.isSpeaking}
           isAudioUnlocked={drivingCompanion.isAudioUnlocked}
+          debugStatus={drivingCompanion.debugStatus}
           onSettingsChange={drivingCompanion.setSettings}
           onEnable={drivingCompanion.enableCompanion}
           onDisable={drivingCompanion.disableCompanion}
