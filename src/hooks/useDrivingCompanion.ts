@@ -64,8 +64,9 @@ type NavigatorWithAudioSession = Navigator & {
 const MIN_REQUEST_INTERVAL_MS = 20000;
 const MAX_LOCATION_AGE_MS = 3000;
 const MAX_RISK_AGE_MS = 5000;
-const MIN_HUMAN_DELAY_MS = 2000;
-const MAX_HUMAN_DELAY_MS = 6000;
+const MIN_HUMAN_DELAY_MS = 150;
+const MAX_HUMAN_DELAY_MS = 650;
+const URGENT_WARNING_DISTANCE_METRES = 250;
 const SPEECH_SPEEDS: Record<DrivingCompanionSettings["speechSpeed"], number> = {
   normal: 1.12,
   fast: 1.25,
@@ -617,18 +618,15 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
     if (scheduled && event.priority <= scheduled.priority) return;
     if (scheduled) window.clearTimeout(scheduled.timeoutId);
 
-    const delay =
-      MIN_HUMAN_DELAY_MS +
-      Math.round(Math.random() * (MAX_HUMAN_DELAY_MS - MIN_HUMAN_DELAY_MS));
-    const drivingContext = buildDrivingContextJson(
-      context,
-      event,
-      lastMessagesRef.current,
-      previousRoadEventsRef.current,
-      lastAcknowledgedDriverActionsRef.current,
-      secondsSinceLastMessage,
-      driverHasSlowedDown,
-    );
+    const distanceToWarning = context.dashboardDrivingState.distanceToUpcomingWarningMetres;
+    const isUrgent =
+      event.type === "speed_warning" ||
+      (typeof distanceToWarning === "number" &&
+        distanceToWarning <= URGENT_WARNING_DISTANCE_METRES);
+    const delay = isUrgent
+      ? 0
+      : MIN_HUMAN_DELAY_MS +
+        Math.round(Math.random() * (MAX_HUMAN_DELAY_MS - MIN_HUMAN_DELAY_MS));
     const timeoutId = window.setTimeout(() => {
       scheduledSpeechRef.current = null;
       if (!isContextFresh(latestContextRef.current)) {
@@ -636,7 +634,18 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         logVoice("cancelled delayed event after vehicle moved on", latestContextRef.current.dashboardDrivingState);
         return;
       }
-      void requestAndPlay(drivingContext, event.priority);
+      void requestAndPlay(
+        buildDrivingContextJson(
+          latestContextRef.current,
+          event,
+          lastMessagesRef.current,
+          previousRoadEventsRef.current,
+          lastAcknowledgedDriverActionsRef.current,
+          secondsSinceLastMessage,
+          driverHasSlowedDown,
+        ),
+        event.priority,
+      );
     }, delay);
     scheduledSpeechRef.current = { key: contextKey, priority: event.priority, timeoutId };
   }, [context, isContextFresh, logVoice, requestAndPlay, settings.mode, warningSettings]);

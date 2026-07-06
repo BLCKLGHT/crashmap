@@ -446,18 +446,18 @@ button:disabled {
 .dashboard-overspeed {
   display: inline-grid;
   place-items: center;
-  min-width: 3.8rem;
+  min-width: 5rem;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   background: #dc2626;
-  box-shadow: 0 0 22px rgba(220, 38, 38, 0.46);
+  box-shadow: 0 0 28px rgba(220, 38, 38, 0.52);
   color: #fff;
-  font-size: clamp(0.9rem, 4.2vw, 1.15rem);
+  font-size: clamp(1.15rem, 5.8vw, 1.7rem);
   font-style: normal;
   font-weight: 950;
   line-height: 1;
   opacity: 0;
-  padding: 0.38rem 0.58rem;
+  padding: 0.5rem 0.78rem;
   transform: translateY(-0.25rem) scale(0.92);
   transition:
     opacity 220ms ease-in-out,
@@ -485,14 +485,14 @@ button:disabled {
 }
 
 .dashboard-speed-readout strong {
-  font-size: clamp(2.6rem, 16vw, 5rem);
+  font-size: clamp(3.6rem, 21vw, 7rem);
   font-weight: 950;
   line-height: 0.9;
 }
 
 .dashboard-speed-readout small {
   color: rgba(255, 255, 255, 0.72);
-  font-size: 0.82rem;
+  font-size: clamp(0.9rem, 3.4vw, 1.15rem);
   font-weight: 850;
 }
 
@@ -1668,11 +1668,13 @@ input[type="range"] {
   }
 
   .dashboard-overspeed {
-    font-size: clamp(0.8rem, 4.5vh, 1rem);
+    min-width: 4.8rem;
+    font-size: clamp(1rem, 6vh, 1.45rem);
+    padding: 0.46rem 0.72rem;
   }
 
   .dashboard-speed-readout strong {
-    font-size: clamp(2rem, 13vh, 3.2rem);
+    font-size: clamp(3rem, 18vh, 5rem);
   }
 
   .dashboard-distance {
