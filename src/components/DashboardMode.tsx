@@ -264,24 +264,27 @@ export function DashboardMode({
               <div className="dashboard-history__conditions" aria-label="Current driving conditions">
                 <span title={currentConditions?.weatherLabel ?? "Weather unavailable"}>
                   {currentConditions?.isRaining ? (
-                    <CloudRain size={22} aria-hidden="true" />
+                    <CloudRain size={26} aria-hidden="true" />
                   ) : (
-                    <Cloud size={22} aria-hidden="true" />
+                    <Cloud size={26} aria-hidden="true" />
                   )}
                   {typeof currentWeather?.temperature === "number" && (
                     <b>{Math.round(currentWeather.temperature)}°</b>
                   )}
                 </span>
-                <span title={currentConditions?.lightCondition ?? "Light conditions unavailable"}>
+                <span
+                  className="dashboard-history__condition-icon-only"
+                  title={currentConditions?.lightCondition ?? "Light conditions unavailable"}
+                >
                   {currentConditions?.lightCondition === "dark" ? (
-                    <Moon size={21} aria-hidden="true" />
+                    <Moon size={25} aria-hidden="true" />
                   ) : (
-                    <Sun size={21} aria-hidden="true" />
+                    <Sun size={25} aria-hidden="true" />
                   )}
                 </span>
                 {typeof currentWeather?.windSpeed === "number" && (
                   <span title={`Wind ${Math.round(currentWeather.windSpeed)} kilometres per hour`}>
-                    <Wind size={22} aria-hidden="true" />
+                    <Wind size={26} aria-hidden="true" />
                     <b>{Math.round(currentWeather.windSpeed)}</b>
                   </span>
                 )}

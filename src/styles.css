@@ -841,21 +841,34 @@ button:disabled {
 .dashboard-history__conditions {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  gap: 0.32rem;
+  gap: 0.38rem;
 }
 
 .dashboard-history__conditions > span {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 1.65rem minmax(1.1rem, auto);
   align-items: center;
-  gap: 0.22rem;
-  min-height: 2rem;
-  min-width: 2.65rem;
-  border-radius: 7px;
+  justify-content: center;
+  justify-items: center;
+  gap: 0.32rem;
+  min-height: 2.55rem;
+  min-width: 4.25rem;
+  border-radius: 9px;
   background: rgba(0, 0, 0, 0.18);
   color: rgba(255, 255, 255, 0.9);
-  padding: 0.28rem 0.48rem;
+  padding: 0.32rem 0.52rem;
+}
+
+.dashboard-history__condition-icon-only svg {
+  grid-column: 1 / -1;
+}
+
+.dashboard-history__conditions svg {
+  display: block;
+  width: 1.65rem;
+  height: 1.65rem;
 }
 
 @keyframes dashboard-odometer-roll {
@@ -871,8 +884,11 @@ button:disabled {
 }
 
 .dashboard-history__conditions b {
-  font-size: 0.85rem;
+  min-width: 1.1rem;
+  font-size: 1rem;
+  font-weight: 900;
   line-height: 1;
+  text-align: left;
 }
 
 .dashboard-history__stats {

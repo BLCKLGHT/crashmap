@@ -55,6 +55,11 @@ type CompanionResponse = {
   audioBase64?: string;
 };
 
+type CachedCompanionResponse = CompanionResponse & {
+  createdAt: number;
+  key: string;
+};
+
 type NavigatorWithAudioSession = Navigator & {
   audioSession?: {
     type?: "auto" | "ambient" | "playback" | "transient" | "transient-solo" | "play-and-record";
@@ -70,6 +75,10 @@ const URGENT_WARNING_DISTANCE_METRES = 250;
 const DEFAULT_VOICE_PIPELINE_LATENCY_MS = 1800;
 const MIN_VOICE_PIPELINE_LATENCY_MS = 500;
 const MAX_VOICE_PIPELINE_LATENCY_MS = 5000;
+const VOICE_PREFETCH_MIN_DISTANCE_METRES = 500;
+const VOICE_PREFETCH_MAX_DISTANCE_METRES = 820;
+const VOICE_PREFETCH_SPOKEN_DISTANCE_METRES = 500;
+const VOICE_PREFETCH_MAX_AGE_MS = 90000;
 const SPEECH_SPEEDS: Record<DrivingCompanionSettings["speechSpeed"], number> = {
   normal: 1.12,
   fast: 1.25,
@@ -243,6 +252,23 @@ const projectContextForVoiceLatency = (
   };
 };
 
+const getCompanionCacheKey = (drivingContext: DrivingContextJson): string =>
+  JSON.stringify({
+    trigger: drivingContext.trigger.type,
+    severity: drivingContext.trigger.severity,
+    risk: drivingContext.riskLevel,
+    road: drivingContext.roadContext ?? "",
+    colour: drivingContext.dashboardDrivingState.upcomingWarningColour,
+    weather: drivingContext.weatherNow ?? "",
+    speedLimit: drivingContext.speedLimit ?? 0,
+    // Keep distance coarse so a prefetched "about 500 metres" line can be
+    // reused when the vehicle reaches the dashboard's 500m warning window.
+    distance:
+      typeof drivingContext.dashboardDrivingState.distanceToUpcomingWarningMetres === "number"
+        ? Math.round(drivingContext.dashboardDrivingState.distanceToUpcomingWarningMetres / 100) * 100
+        : 0,
+  });
+
 const makeTestContext = (
   type: VoiceWarningType,
   lastMessages: string[],
@@ -313,7 +339,10 @@ const makeTestContext = (
   return base;
 };
 
-export function useDrivingCompanion(context: VoiceWarningContext) {
+export function useDrivingCompanion(
+  context: VoiceWarningContext,
+  predictiveContext: VoiceWarningContext | null = null,
+) {
   const [settings, setSettings] = useState<DrivingCompanionSettings>(
     DEFAULT_DRIVING_COMPANION_SETTINGS,
   );
@@ -336,6 +365,8 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   const latestContextRef = useRef(context);
   const lastRequestRef = useRef<{ time: number; priority: number; contextKey: string } | null>(null);
   const pipelineLatencyMsRef = useRef(DEFAULT_VOICE_PIPELINE_LATENCY_MS);
+  const cachedCompanionResponsesRef = useRef(new Map<string, CachedCompanionResponse>());
+  const pendingPrefetchKeysRef = useRef(new Set<string>());
 
   const isSupported = typeof Audio !== "undefined" && typeof URL !== "undefined";
 
@@ -418,6 +449,39 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
     }
   }, [isSupported, settings.volume]);
 
+  const fetchCompanionPayload = useCallback(
+    async (drivingContext: DrivingContextJson, signal?: AbortSignal): Promise<CompanionResponse> => {
+      const companionMode = settings.mode === "off" ? "normal" : settings.mode;
+      const response = await fetch("/api/driving-companion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal,
+        body: JSON.stringify({
+          context: drivingContext,
+          mode: companionMode,
+          voice: settings.voice,
+          buddyMode: settings.buddyMode,
+          talkativeness: settings.talkativeness,
+          speechSpeed: SPEECH_SPEEDS[settings.speechSpeed],
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error ?? `Driving companion failed with ${response.status}`);
+      }
+
+      return (await response.json()) as CompanionResponse;
+    },
+    [
+      settings.buddyMode,
+      settings.mode,
+      settings.speechSpeed,
+      settings.talkativeness,
+      settings.voice,
+    ],
+  );
+
   const requestAndPlay = useCallback(
     async (drivingContext: DrivingContextJson, priority: number, ignoreTiming = false) => {
       if ((settings.mode === "off" && !ignoreTiming) || !isSupported) return;
@@ -431,7 +495,6 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       const projectedDrivingContext = ignoreTiming
         ? drivingContext
         : projectContextForVoiceLatency(drivingContext, pipelineLatencyMsRef.current);
-      const companionMode = settings.mode === "off" ? "normal" : settings.mode;
       const isSpeedWarning = projectedDrivingContext.trigger.type === "speed_warning";
       const contextKey = JSON.stringify({
         trigger: projectedDrivingContext.trigger.type,
@@ -445,6 +508,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
             ? Math.round(projectedDrivingContext.speed - projectedDrivingContext.speedLimit)
             : 0,
       });
+      const audioCacheKey = getCompanionCacheKey(projectedDrivingContext);
       const lastRequest = lastRequestRef.current;
 
       if (
@@ -493,26 +557,26 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       const pipelineStartedAt = performance.now();
 
       try {
-        const response = await fetch("/api/driving-companion", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            context: projectedDrivingContext,
-            mode: companionMode,
-            voice: settings.voice,
-            buddyMode: settings.buddyMode,
-            talkativeness: settings.talkativeness,
-            speechSpeed: SPEECH_SPEEDS[settings.speechSpeed],
-          }),
-        });
+        const cachedPayload = cachedCompanionResponsesRef.current.get(audioCacheKey);
+        const payload =
+          cachedPayload && now - cachedPayload.createdAt < VOICE_PREFETCH_MAX_AGE_MS
+            ? cachedPayload
+            : await fetchCompanionPayload(projectedDrivingContext, controller.signal);
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error ?? `Driving companion failed with ${response.status}`);
+        if (cachedPayload && payload === cachedPayload) {
+          cachedCompanionResponsesRef.current.delete(audioCacheKey);
+          logVoice("using prefetched voice audio", {
+            key: audioCacheKey,
+            ageMs: now - cachedPayload.createdAt,
+          });
+        } else if (payload.audioBase64 && payload.text.trim()) {
+          cachedCompanionResponsesRef.current.set(audioCacheKey, {
+            ...payload,
+            key: audioCacheKey,
+            createdAt: Date.now(),
+          });
         }
 
-        const payload = (await response.json()) as CompanionResponse;
         if (!payload.audioBase64 || !payload.text.trim()) {
           setDebugStatus("Voice ready");
           setLastSpoken("Companion stayed quiet");
@@ -635,20 +699,114 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       }
     },
     [
+      fetchCompanionPayload,
       isContextFresh,
       isSpeaking,
       isSupported,
       logVoice,
       revokeCurrentAudioUrl,
       settings.mode,
-      settings.buddyMode,
-      settings.speechSpeed,
       settings.talkativeness,
-      settings.voice,
       settings.volume,
       stopAudio,
     ],
   );
+
+  useEffect(() => {
+    if (
+      !predictiveContext?.isActive ||
+      settings.mode === "off" ||
+      !isSupported ||
+      !isContextFresh(predictiveContext)
+    ) {
+      return;
+    }
+
+    const distance = predictiveContext.dashboardDrivingState.distanceToUpcomingWarningMetres;
+    if (
+      typeof distance !== "number" ||
+      distance < VOICE_PREFETCH_MIN_DISTANCE_METRES ||
+      distance > VOICE_PREFETCH_MAX_DISTANCE_METRES
+    ) {
+      return;
+    }
+
+    const [event] = buildVoiceWarningEvents(predictiveContext, warningSettings).filter(
+      (candidate) =>
+        candidate.type !== "speed_warning" &&
+        candidate.type !== "following_distance_warning" &&
+        candidate.type !== "calm_reminder" &&
+        candidate.type !== "buddy_observation" &&
+        candidate.priority >= getPriorityThreshold(settings.talkativeness),
+    );
+    if (!event) return;
+
+    const drivingContext = buildDrivingContextJson(
+      {
+        ...predictiveContext,
+        dashboardDrivingState: {
+          ...predictiveContext.dashboardDrivingState,
+          distanceToUpcomingWarningMetres: VOICE_PREFETCH_SPOKEN_DISTANCE_METRES,
+        },
+      },
+      event,
+      lastMessagesRef.current,
+      previousRoadEventsRef.current,
+      lastAcknowledgedDriverActionsRef.current,
+      lastSpokenAtRef.current
+        ? Math.round((Date.now() - lastSpokenAtRef.current) / 1000)
+        : undefined,
+      false,
+    );
+    drivingContext.distanceToRiskMetres = VOICE_PREFETCH_SPOKEN_DISTANCE_METRES;
+
+    const cacheKey = getCompanionCacheKey(drivingContext);
+    const existing = cachedCompanionResponsesRef.current.get(cacheKey);
+    if (existing && Date.now() - existing.createdAt < VOICE_PREFETCH_MAX_AGE_MS) return;
+    if (pendingPrefetchKeysRef.current.has(cacheKey)) return;
+
+    pendingPrefetchKeysRef.current.add(cacheKey);
+    logVoice("prefetching upcoming voice warning", {
+      key: cacheKey,
+      realDistanceMetres: distance,
+      spokenDistanceMetres: VOICE_PREFETCH_SPOKEN_DISTANCE_METRES,
+      event,
+    });
+
+    const controller = new AbortController();
+    void fetchCompanionPayload(drivingContext, controller.signal)
+      .then((payload) => {
+        if (!payload.audioBase64 || !payload.text.trim()) return;
+        cachedCompanionResponsesRef.current.set(cacheKey, {
+          ...payload,
+          key: cacheKey,
+          createdAt: Date.now(),
+        });
+        logVoice("prefetched voice warning ready", { key: cacheKey, text: payload.text });
+      })
+      .catch((caughtError) => {
+        if ((caughtError as Error).name !== "AbortError") {
+          logVoice("voice prefetch failed", caughtError);
+        }
+      })
+      .finally(() => {
+        pendingPrefetchKeysRef.current.delete(cacheKey);
+      });
+
+    return () => {
+      controller.abort();
+      pendingPrefetchKeysRef.current.delete(cacheKey);
+    };
+  }, [
+    fetchCompanionPayload,
+    isContextFresh,
+    isSupported,
+    logVoice,
+    predictiveContext,
+    settings.mode,
+    settings.talkativeness,
+    warningSettings,
+  ]);
 
   useEffect(() => {
     latestContextRef.current = context;

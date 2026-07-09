@@ -94,6 +94,7 @@ const VOICE_REACTION_TIME_SECONDS = 1.5;
 const VOICE_CAR_LENGTH_METRES = 5;
 const DASHBOARD_WARNING_DISTANCE_METRES = 500;
 const DASHBOARD_WARNING_REARM_METRES = 80;
+const VOICE_PREDICTIVE_LOOKAHEAD_METRES = 800;
 
 const SIMULATION_SPEED_SPIKES: Array<{
   segmentIndex: number;
@@ -1068,6 +1069,28 @@ function App() {
     ],
   );
 
+  const predictiveVoiceLookaheadRisk = useMemo(
+    () =>
+      getDashboardLookaheadRisk(
+        crashSpatialIndex,
+        isDriveModeActive ? driveLocation : null,
+        VOICE_PREDICTIVE_LOOKAHEAD_METRES,
+        80,
+        activeDrivingConditions,
+        dashboardWeatherMode,
+        filters.weatherMode === "historical" ? historicalWeatherMatchState.matches : {},
+      ),
+    [
+      activeDrivingConditions,
+      crashSpatialIndex,
+      dashboardWeatherMode,
+      driveLocation,
+      filters.weatherMode,
+      historicalWeatherMatchState.matches,
+      isDriveModeActive,
+    ],
+  );
+
   useEffect(() => {
     if (
       !isDriveModeActive ||
@@ -1326,7 +1349,56 @@ function App() {
       isDriveModeActive,
     ],
   );
-  const drivingCompanion = useDrivingCompanion(voiceContext);
+  const predictiveVoiceContext = useMemo<VoiceWarningContext | null>(() => {
+    if (!predictiveVoiceLookaheadRisk || predictiveVoiceLookaheadRisk.riskLevel === "low") {
+      return null;
+    }
+
+    const distance =
+      typeof predictiveVoiceLookaheadRisk.nearestCrashDistanceMetres === "number"
+        ? Math.max(0, Math.round(predictiveVoiceLookaheadRisk.nearestCrashDistanceMetres))
+        : predictiveVoiceLookaheadRisk.lookaheadDistanceMetres;
+    const predictiveDrivingState: DashboardDrivingState = {
+      ...dashboardDrivingState,
+      currentWarningLevel: predictiveVoiceLookaheadRisk.riskLevel,
+      currentWarningColour: getWarningColour(predictiveVoiceLookaheadRisk.riskLevel),
+      upcomingWarningLevel: predictiveVoiceLookaheadRisk.riskLevel,
+      upcomingWarningColour: getWarningColour(predictiveVoiceLookaheadRisk.riskLevel),
+      distanceToUpcomingWarningMetres: distance,
+      upcomingZoneType: getZoneType(predictiveVoiceLookaheadRisk.roadContext),
+      optionalLandmark: getOptionalLandmark(predictiveVoiceLookaheadRisk.roadContext),
+      riskTimestamp: Date.now(),
+    };
+
+    return {
+      isActive: isDriveModeActive,
+      speedKmh: predictiveDrivingState.currentSpeed,
+      speedLimitKmh: predictiveDrivingState.speedLimit,
+      carLengths: predictiveDrivingState.recommendedCarLengths,
+      riskLevel: predictiveVoiceLookaheadRisk.riskLevel,
+      totalCrashCount: predictiveVoiceLookaheadRisk.totalCrashCount,
+      seriousCount: predictiveVoiceLookaheadRisk.seriousCount,
+      fatalCount: predictiveVoiceLookaheadRisk.fatalCount,
+      matchedCrashCount: predictiveVoiceLookaheadRisk.matchedCrashCount,
+      wetCrashCount: predictiveVoiceLookaheadRisk.wetCrashCount,
+      darkCrashCount: predictiveVoiceLookaheadRisk.darkCrashCount,
+      currentConditions: activeDrivingConditions,
+      dashboardDrivingState: predictiveDrivingState,
+      lookaheadDistanceMetres: predictiveVoiceLookaheadRisk.lookaheadDistanceMetres,
+      roadContext: predictiveVoiceLookaheadRisk.roadContext,
+      segmentKey: getVoiceSegmentKey(
+        displayedDriveLocation,
+        predictiveVoiceLookaheadRisk.riskLevel,
+      ),
+    };
+  }, [
+    activeDrivingConditions,
+    dashboardDrivingState,
+    displayedDriveLocation,
+    isDriveModeActive,
+    predictiveVoiceLookaheadRisk,
+  ]);
+  const drivingCompanion = useDrivingCompanion(voiceContext, predictiveVoiceContext);
 
   return (
     <main
