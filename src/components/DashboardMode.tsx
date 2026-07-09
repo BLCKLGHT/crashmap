@@ -1,4 +1,16 @@
-import { Car, CarFront, FlaskConical, Pause, Play, Square } from "lucide-react";
+import {
+  Car,
+  CarFront,
+  Cloud,
+  CloudRain,
+  FlaskConical,
+  Moon,
+  Pause,
+  Play,
+  Square,
+  Sun,
+  Wind,
+} from "lucide-react";
 import type {
   CurrentDrivingConditions,
   CurrentWeather,
@@ -8,6 +20,7 @@ import type {
   DriveRiskSummary,
   WeatherState,
 } from "../types/crash";
+import { DashboardMiniMap } from "./DashboardMiniMap";
 
 type DashboardModeProps = {
   isActive: boolean;
@@ -108,46 +121,6 @@ const getRoadHistoryDistanceParts = (
   return { prefix: "In", value: String(roundedDistance), unit: "m" };
 };
 
-const getConditionLabel = (
-  conditions: CurrentDrivingConditions | null,
-  status: WeatherState["status"],
-): string => {
-  if (!conditions) {
-    if (status === "error") return "Weather unavailable";
-    if (status === "loading" || status === "idle") return "checking weather";
-    return "Weather unavailable";
-  }
-  const surface =
-    conditions.surfaceCondition === "wet"
-      ? "wet road"
-      : conditions.surfaceCondition === "dry"
-        ? "dry road"
-        : "road unknown";
-  const light = conditions.lightCondition.replace("_", "/");
-  return `${status === "error" ? "estimated " : ""}${surface}, ${light}`;
-};
-
-const getWeatherDetailLabel = (
-  weather: CurrentWeather | null,
-  conditions: CurrentDrivingConditions | null,
-  status: WeatherState["status"],
-): string => {
-  if (!weather) {
-    if (status === "simulated") return `Simulated weather: ${conditions?.weatherLabel ?? "active"}`;
-    if (status === "loading" || status === "idle") return "";
-    if (status === "error") return "Weather unavailable, using time-of-day estimate";
-    return "Weather: waiting for location";
-  }
-
-  const parts = [
-    typeof weather.temperature === "number" ? `${Math.round(weather.temperature)}°C` : null,
-    conditions?.weatherLabel,
-    typeof weather.windSpeed === "number" ? `wind ${Math.round(weather.windSpeed)} km/h` : null,
-  ].filter(Boolean);
-
-  return parts.length ? parts.join(", ") : "Current weather loaded";
-};
-
 const getRoadHistoryHeadline = (
   lookaheadRisk: DashboardLookaheadRisk | null,
   currentConditions: CurrentDrivingConditions | null,
@@ -186,11 +159,15 @@ export function DashboardMode({
   const visibleCars = getVisibleCarCount(carLengths);
   const hasMoreCarLengths = carLengths > 10;
   const risk = lookaheadRisk?.riskLevel ?? "low";
+  const hasUpcomingWarning =
+    isActive &&
+    Boolean(lookaheadRisk?.hasHeading) &&
+    risk !== "low" &&
+    typeof lookaheadRisk?.nearestCrashDistanceMetres === "number" &&
+    lookaheadRisk.nearestCrashDistanceMetres <= 500;
   const distanceParts = getRoadHistoryDistanceParts(lookaheadRisk);
   const distanceLabel = `${distanceParts.prefix} ${distanceParts.value} ${distanceParts.unit}`;
   const historyHeadline = getRoadHistoryHeadline(lookaheadRisk, currentConditions);
-  const conditionLabel = getConditionLabel(currentConditions, weatherStatus);
-  const weatherDetailLabel = getWeatherDetailLabel(currentWeather, currentConditions, weatherStatus);
   const hasConditionData = lookaheadRisk?.conditionDataAvailable ?? false;
   const matchedCrashCount = lookaheadRisk?.matchedCrashCount ?? 0;
   const showMatchedStats = currentConditions !== null && hasConditionData;
@@ -198,8 +175,8 @@ export function DashboardMode({
 
   return (
     <section className={`dashboard-mode dashboard-mode--${risk}`}>
-      <div className="dashboard-mode__controls" aria-label="Dashboard mode controls">
-        {!isActive ? (
+      {!isActive && (
+        <div className="dashboard-mode__controls" aria-label="Dashboard mode controls">
           <>
             <button type="button" onClick={onStartDrive}>
               <CarFront size={18} aria-hidden="true" />
@@ -210,25 +187,8 @@ export function DashboardMode({
               <span>Sim</span>
             </button>
           </>
-        ) : (
-          <>
-            {isSimulation && (
-              <button type="button" onClick={onToggleSimulationDrive}>
-                {isSimulationDriving ? (
-                  <Pause size={17} aria-hidden="true" />
-                ) : (
-                  <Play size={17} aria-hidden="true" />
-                )}
-                <span>{isSimulationDriving ? "Pause" : "Auto"}</span>
-              </button>
-            )}
-            <button type="button" onClick={onStopDrive}>
-              <Square size={15} aria-hidden="true" />
-              <span>Stop</span>
-            </button>
-          </>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="dashboard-mode__top">
         <div className="dashboard-speed-sign" aria-label={`Speed zone ${speedZone}`}>
@@ -238,10 +198,17 @@ export function DashboardMode({
           <span>Current</span>
           <strong>{formatSpeedKmh(location?.speed)}</strong>
           <small>km/h</small>
-          <em className={`dashboard-overspeed ${overspeedDelta !== null ? "is-visible" : ""}`}>
-            {overspeedDelta !== null ? `+${overspeedDelta}km/h` : "+0km/h"}
-          </em>
         </div>
+      </div>
+
+      <div
+        className={`dashboard-overspeed ${overspeedDelta !== null ? "is-visible" : ""}`}
+        role="status"
+        aria-live="polite"
+      >
+        <span>Over limit</span>
+        <strong>{overspeedDelta !== null ? `+${overspeedDelta}` : ""}</strong>
+        <small>km/h</small>
       </div>
 
       <div
@@ -259,43 +226,96 @@ export function DashboardMode({
         </div>
       </div>
 
-      <div className="dashboard-history">
-        <span>Road history ahead</span>
-        <strong className="dashboard-history__distance" aria-label={distanceLabel}>
-          <span>{distanceParts.prefix}</span>
-          <b>{distanceParts.value}</b>
-          <em>{distanceParts.unit}</em>
-        </strong>
-        <p className="dashboard-history__condition">Current condition: {conditionLabel}</p>
-        {weatherDetailLabel && <p className="dashboard-history__condition">{weatherDetailLabel}</p>}
-        <h2>{historyHeadline}</h2>
-        <div className="dashboard-history__stats">
-          <div>
-            <span>{showMatchedStats ? "Matched" : "Crashes"}</span>
-            <strong>{showMatchedStats ? matchedCrashCount : lookaheadRisk?.totalCrashCount ?? 0}</strong>
-          </div>
-          <div>
-            <span>Serious</span>
-            <strong>
-              {showMatchedStats
-                ? lookaheadRisk?.matchedSeriousCount ?? 0
-                : lookaheadRisk?.seriousCount ?? 0}
-            </strong>
-          </div>
-          <div>
-            <span>Fatal</span>
-            <strong>
-              {showMatchedStats
-                ? lookaheadRisk?.matchedFatalCount ?? 0
-                : lookaheadRisk?.fatalCount ?? 0}
-            </strong>
-          </div>
+      <div className={`dashboard-history ${hasUpcomingWarning ? "" : "dashboard-history--empty"}`}>
+        <div
+          className={`dashboard-history__map ${hasUpcomingWarning ? "" : "is-visible"}`}
+          aria-hidden="true"
+        >
+          <DashboardMiniMap location={location} />
         </div>
-        {!hasConditionData && currentConditions && (
-          <small>Limited weather-condition data available.</small>
+        <div
+          className={`dashboard-history__warning ${
+            hasUpcomingWarning ? "is-visible" : ""
+          }`}
+          aria-hidden={!hasUpcomingWarning}
+        >
+            <span>Road history ahead</span>
+            <div className="dashboard-history__distance-row">
+              <strong className="dashboard-history__distance" aria-label={distanceLabel}>
+                <span>{distanceParts.prefix}</span>
+                <b>
+                  <i key={distanceParts.value}>{distanceParts.value}</i>
+                </b>
+                <em>{distanceParts.unit}</em>
+              </strong>
+              <div className="dashboard-history__conditions" aria-label="Current driving conditions">
+                <span title={currentConditions?.weatherLabel ?? "Weather unavailable"}>
+                  {currentConditions?.isRaining ? (
+                    <CloudRain size={22} aria-hidden="true" />
+                  ) : (
+                    <Cloud size={22} aria-hidden="true" />
+                  )}
+                  {typeof currentWeather?.temperature === "number" && (
+                    <b>{Math.round(currentWeather.temperature)}°</b>
+                  )}
+                </span>
+                <span title={currentConditions?.lightCondition ?? "Light conditions unavailable"}>
+                  {currentConditions?.lightCondition === "dark" ? (
+                    <Moon size={21} aria-hidden="true" />
+                  ) : (
+                    <Sun size={21} aria-hidden="true" />
+                  )}
+                </span>
+                {typeof currentWeather?.windSpeed === "number" && (
+                  <span title={`Wind ${Math.round(currentWeather.windSpeed)} kilometres per hour`}>
+                    <Wind size={22} aria-hidden="true" />
+                    <b>{Math.round(currentWeather.windSpeed)}</b>
+                  </span>
+                )}
+              </div>
+            </div>
+            <h2>{historyHeadline}</h2>
+            <div className="dashboard-history__stats">
+              <div>
+                <span>{showMatchedStats ? "Similar" : "Crashes"}</span>
+                <strong>{showMatchedStats ? matchedCrashCount : lookaheadRisk?.totalCrashCount ?? 0}</strong>
+              </div>
+              <div>
+                <span>Serious</span>
+                <strong>
+                  {showMatchedStats
+                    ? lookaheadRisk?.matchedSeriousCount ?? 0
+                    : lookaheadRisk?.seriousCount ?? 0}
+                </strong>
+              </div>
+              <div>
+                <span>Fatal</span>
+                <strong>
+                  {showMatchedStats
+                    ? lookaheadRisk?.matchedFatalCount ?? 0
+                    : lookaheadRisk?.fatalCount ?? 0}
+                </strong>
+              </div>
+            </div>
+        </div>
+        {isActive && (
+          <div className="dashboard-history__controls" aria-label="Dashboard driving controls">
+            {isSimulation && (
+              <button type="button" onClick={onToggleSimulationDrive}>
+                {isSimulationDriving ? (
+                  <Pause size={17} aria-hidden="true" />
+                ) : (
+                  <Play size={17} aria-hidden="true" />
+                )}
+                <span>{isSimulationDriving ? "Pause" : "Auto"}</span>
+              </button>
+            )}
+            <button type="button" onClick={onStopDrive}>
+              <Square size={15} aria-hidden="true" />
+              <span>Stop</span>
+            </button>
+          </div>
         )}
-        {weatherStatus === "error" && <small>Weather unavailable. Showing all crash history.</small>}
-        <small>Historical crash data only. Weather matching is approximate.</small>
         {error && <small className="dashboard-error">{error}</small>}
       </div>
     </section>

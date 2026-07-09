@@ -199,6 +199,7 @@ button:disabled {
   z-index: 620;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.45rem;
   min-height: 2.35rem;
   border: 1px solid rgba(20, 34, 28, 0.14);
@@ -209,6 +210,11 @@ button:disabled {
   font-size: 0.78rem;
   font-weight: 900;
   padding: 0 0.82rem;
+}
+
+.fullscreen-toggle svg {
+  display: block;
+  flex: 0 0 auto;
 }
 
 .voice-settings {
@@ -435,7 +441,8 @@ button:disabled {
 .dashboard-mode__controls {
   position: absolute;
   top: max(4.1rem, calc(env(safe-area-inset-top) + 3.8rem));
-  right: max(12px, env(safe-area-inset-right));
+  right: auto;
+  left: max(12px, env(safe-area-inset-left));
   z-index: 20;
   display: flex;
   gap: 0.42rem;
@@ -458,9 +465,9 @@ button:disabled {
 .dashboard-mode__top {
   display: grid;
   grid-template-columns: 1fr auto;
-  align-items: end;
+  align-items: center;
   gap: 1rem;
-  padding: max(5.8rem, calc(env(safe-area-inset-top) + 5.4rem)) 1.15rem 1.2rem;
+  padding: max(7.2rem, calc(env(safe-area-inset-top) + 6.8rem)) 1.15rem 1.2rem;
 }
 
 .dashboard-speed-sign {
@@ -488,32 +495,59 @@ button:disabled {
 }
 
 .dashboard-overspeed {
-  display: inline-grid;
+  position: absolute;
+  top: calc(32dvh - 3.7rem);
+  left: 50%;
+  z-index: 32;
+  display: grid;
+  grid-template-columns: auto auto;
   place-items: center;
-  min-width: 5rem;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
-  background: #dc2626;
-  box-shadow: 0 0 28px rgba(220, 38, 38, 0.52);
+  column-gap: 0.35rem;
+  min-width: 10.6rem;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  background: rgba(185, 28, 28, 0.96);
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.48),
+    0 8px 24px rgba(127, 29, 29, 0.72);
   color: #fff;
-  font-size: clamp(1.15rem, 5.8vw, 1.7rem);
   font-style: normal;
-  font-weight: 950;
-  line-height: 1;
   opacity: 0;
-  padding: 0.5rem 0.78rem;
-  transform: translateY(-0.25rem) scale(0.92);
+  padding: 0.72rem 1.05rem 0.78rem;
+  pointer-events: none;
+  transform: translate(-50%, -0.5rem) scale(0.9);
   transition:
-    opacity 220ms ease-in-out,
-    transform 220ms ease-in-out,
+    opacity 180ms ease-out,
+    transform 220ms cubic-bezier(0.2, 0.85, 0.25, 1.15),
     visibility 220ms ease-in-out;
   visibility: hidden;
 }
 
 .dashboard-overspeed.is-visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translate(-50%, 0) scale(1);
   visibility: visible;
+}
+
+.dashboard-overspeed span {
+  grid-column: 1 / -1;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.67rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.dashboard-overspeed strong {
+  font-size: clamp(2.45rem, 10.5vw, 3.45rem);
+  font-weight: 950;
+  line-height: 0.9;
+}
+
+.dashboard-overspeed small {
+  align-self: end;
+  color: #fff;
+  font-size: 0.86rem;
+  font-weight: 900;
 }
 
 .dashboard-speed-readout span,
@@ -619,18 +653,139 @@ button:disabled {
 }
 
 .dashboard-history {
+  position: relative;
   display: grid;
-  align-content: center;
+  grid-template-rows: 1fr auto;
+  align-content: stretch;
   gap: 0.55rem;
   padding: 1rem 1.15rem max(1.1rem, env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.1);
-  transition: background 420ms ease;
+  transition: background 520ms ease-in-out;
+}
+
+.dashboard-history--empty {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.dashboard-history__map {
+  position: absolute;
+  top: -7rem;
+  right: -18px;
+  bottom: -18px;
+  left: -18px;
+  z-index: 0;
+  opacity: 0;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 0.5rem,
+    rgba(0, 0, 0, 0.3) 3.2rem,
+    #000 7rem
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 0.5rem,
+    rgba(0, 0, 0, 0.3) 3.2rem,
+    #000 7rem
+  );
+  pointer-events: none;
+  transition: opacity 700ms ease-in-out;
+  visibility: hidden;
+}
+
+.dashboard-history__map.is-visible {
+  opacity: 0.68;
+  visibility: visible;
+}
+
+.dashboard-history__map::after {
+  position: absolute;
+  inset: 0;
+  z-index: 500;
+  background:
+    linear-gradient(180deg, rgba(32, 57, 75, 0.48), transparent 28%, transparent 72%, rgba(7, 32, 51, 0.72)),
+    linear-gradient(90deg, rgba(7, 32, 51, 0.66), transparent 20%, transparent 80%, rgba(7, 32, 51, 0.66));
+  content: "";
+}
+
+.dashboard-history__map .dashboard-mini-map {
+  width: 100%;
+  height: calc(100% + 10rem);
+  background: transparent;
+  transform: translateY(-11rem) perspective(760px) rotateX(43deg) scale(1.78);
+  transform-origin: 50% 100%;
+}
+
+.dashboard-mini-map .leaflet-tile-pane {
+  opacity: 0.9;
+  filter: grayscale(0.88) saturate(0.5) contrast(0.78) brightness(1.12);
+}
+
+.dashboard-mini-map__vehicle {
+  display: grid !important;
+  place-items: center;
+  background: transparent;
+}
+
+.dashboard-mini-map__vehicle span {
+  display: block;
+  width: 0;
+  height: 0;
+  border-right: 9px solid transparent;
+  border-bottom: 25px solid #ef4444;
+  border-left: 9px solid transparent;
+  filter:
+    drop-shadow(0 0 2px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 4px 8px rgba(0, 0, 0, 0.42));
+  transform: rotate(var(--vehicle-heading, 0deg));
+  transform-origin: 50% 62%;
+}
+
+.dashboard-mini-map .leaflet-control-attribution {
+  border-radius: 4px 0 0;
+  background: rgba(5, 12, 10, 0.46);
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 7px;
+}
+
+.dashboard-mini-map .leaflet-control-attribution a {
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.dashboard-history__warning {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  align-content: center;
+  gap: 0.5rem;
+  opacity: 0;
+  transform: translateY(0.75rem) scale(0.985);
+  transition:
+    opacity 420ms ease-in-out,
+    transform 520ms cubic-bezier(0.22, 0.72, 0.26, 1),
+    visibility 420ms ease-in-out;
+  visibility: hidden;
+}
+
+.dashboard-history__warning.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  visibility: visible;
 }
 
 .dashboard-history strong {
   font-size: clamp(2.2rem, 13vw, 4.7rem);
   font-weight: 950;
   line-height: 0.9;
+}
+
+.dashboard-history__distance-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
 }
 
 .dashboard-history__distance {
@@ -648,12 +803,23 @@ button:disabled {
 }
 
 .dashboard-history__distance b {
+  display: inline-grid;
+  min-width: 1.15em;
+  overflow: hidden;
+  perspective: 280px;
   color: #fff;
   font-size: clamp(4.8rem, 27vw, 9rem);
   font-weight: 950;
   letter-spacing: 0;
   line-height: 0.78;
   text-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+}
+
+.dashboard-history__distance b i {
+  display: block;
+  font-style: normal;
+  animation: dashboard-odometer-roll 360ms cubic-bezier(0.2, 0.75, 0.25, 1);
+  transform-origin: 50% 50%;
 }
 
 .dashboard-history__distance em {
@@ -670,12 +836,41 @@ button:disabled {
   line-height: 1;
 }
 
-.dashboard-history__condition {
-  max-width: 28rem;
-  margin: -0.18rem 0 0;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 0.92rem;
-  font-weight: 850;
+.dashboard-history__conditions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+}
+
+.dashboard-history__conditions > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  min-height: 2rem;
+  min-width: 2.65rem;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 0.28rem 0.48rem;
+}
+
+@keyframes dashboard-odometer-roll {
+  from {
+    opacity: 0.2;
+    transform: translateY(-42%) rotateX(68deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) rotateX(0);
+  }
+}
+
+.dashboard-history__conditions b {
+  font-size: 0.85rem;
+  line-height: 1;
 }
 
 .dashboard-history__stats {
@@ -696,6 +891,31 @@ button:disabled {
 .dashboard-history__stats strong {
   font-size: 1.5rem;
   line-height: 1;
+}
+
+.dashboard-history__controls {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  gap: 0.45rem;
+  align-self: end;
+  padding-top: 0.25rem;
+}
+
+.dashboard-mode__controls button,
+.dashboard-history__controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+  min-height: 2.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 950;
+  padding: 0 0.68rem;
 }
 
 .dashboard-history small {
@@ -750,29 +970,36 @@ button:disabled {
 }
 
 .speed-overspeed {
+  position: fixed;
+  top: calc(max(10px, env(safe-area-inset-top)) + 4.15rem);
+  left: 50%;
+  z-index: 720;
   display: inline-grid;
   place-items: center;
-  align-self: center;
-  border-radius: 999px;
-  background: #dc2626;
+  min-width: 7.5rem;
+  border: 2px solid rgba(255, 255, 255, 0.72);
+  border-radius: 10px;
+  background: rgba(185, 28, 28, 0.96);
+  box-shadow: 0 12px 34px rgba(127, 29, 29, 0.58);
   color: #fff;
-  font-size: 0.74rem;
+  font-size: 1.15rem;
   font-style: normal;
   font-weight: 950;
   line-height: 1;
   opacity: 0;
-  padding: 0.2rem 0.34rem;
-  transform: translateY(-0.12rem) scale(0.92);
+  padding: 0.58rem 0.76rem;
+  pointer-events: none;
+  transform: translate(-50%, -0.4rem) scale(0.9);
   transition:
     opacity 200ms ease-in-out,
-    transform 200ms ease-in-out,
+    transform 220ms cubic-bezier(0.2, 0.85, 0.25, 1.15),
     visibility 200ms ease-in-out;
   visibility: hidden;
 }
 
 .speed-overspeed.is-visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translate(-50%, 0) scale(1);
   visibility: visible;
 }
 
@@ -1691,13 +1918,17 @@ input[type="range"] {
 
   .dashboard-mode__controls {
     top: max(10px, env(safe-area-inset-top));
-    right: max(10px, env(safe-area-inset-right));
+    right: auto;
+    left: max(10px, env(safe-area-inset-left));
   }
 
   .dashboard-mode__top {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto auto;
     align-content: center;
+    align-items: center;
+    justify-content: center;
     justify-items: center;
+    gap: 1rem;
     padding: calc(max(10px, env(safe-area-inset-top)) + 2.9rem) 0.75rem max(10px, env(safe-area-inset-bottom));
   }
 
@@ -1712,9 +1943,10 @@ input[type="range"] {
   }
 
   .dashboard-overspeed {
-    min-width: 4.8rem;
-    font-size: clamp(1rem, 6vh, 1.45rem);
-    padding: 0.46rem 0.72rem;
+    top: 50%;
+    left: 35vw;
+    min-width: 9rem;
+    padding: 0.55rem 0.82rem 0.62rem;
   }
 
   .dashboard-speed-readout strong {
@@ -1745,6 +1977,10 @@ input[type="range"] {
 
   .dashboard-history {
     padding: calc(max(10px, env(safe-area-inset-top)) + 2.6rem) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) 0.9rem;
+  }
+
+  .dashboard-history__warning {
+    align-content: center;
   }
 
   .dashboard-history strong {
@@ -1985,8 +2221,19 @@ input[type="range"] {
 
   .fullscreen-toggle,
   .app--drive-active .fullscreen-toggle {
-    top: calc(max(10px, env(safe-area-inset-top)) + 3.35rem);
+    top: max(10px, env(safe-area-inset-top));
     right: max(10px, env(safe-area-inset-right));
+    display: grid;
+    place-items: center;
+    width: 2.45rem;
+    min-width: 2.45rem;
+    height: 2.35rem;
+    min-height: 2.35rem;
+    padding: 0;
+  }
+
+  .fullscreen-toggle span {
+    display: none;
   }
 
   .app.app--chrome-hidden .fullscreen-toggle {

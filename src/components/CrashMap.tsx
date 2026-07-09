@@ -1166,20 +1166,17 @@ export function CrashMap({
     }
 
     map.stop();
-    if (driveMode.location.isSimulated) {
-      if (shouldZoom) {
-        map.setZoom(DRIVE_FOLLOW_ZOOM, { animate: false });
-      }
-      map.panTo(targetCenter, {
-        animate: true,
-        duration: 0.75,
-        easeLinearity: 0.22,
-        noMoveStart: true,
-      });
-    } else {
-      map.setView(targetCenter, targetZoom, { animate: false });
-      map.invalidateSize({ animate: false, pan: false });
+    if (shouldZoom) {
+      map.setZoom(targetZoom, { animate: false });
     }
+    // Panning preserves Leaflet's buffered tile pane. Repeated setView/invalidateSize
+    // calls on iOS briefly exposed the empty map background on every GPS update.
+    map.panTo(targetCenter, {
+      animate: true,
+      duration: driveMode.location.isSimulated ? 0.75 : 1.15,
+      easeLinearity: 0.2,
+      noMoveStart: true,
+    });
     applyMapBearing(map, mapBearing);
     setViewState({
       zoom: map.getZoom(),

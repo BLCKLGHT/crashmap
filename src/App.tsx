@@ -34,6 +34,7 @@ import type {
   CurrentDrivingConditions,
   DashboardCrashRiskLevel,
   DashboardDrivingState,
+  DashboardLookaheadRisk,
   DashboardWarningColour,
   DashboardZoneType,
   DriveLocation,
@@ -64,6 +65,14 @@ type WeatherSimulationMode =
   | "historyFailure"
   | "historySlow";
 
+type DashboardWarningCountdown = {
+  status: "active" | "passed";
+  remainingMetres: number;
+  lastLatitude: number;
+  lastLongitude: number;
+  risk: DashboardLookaheadRisk;
+};
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const crashTimeCache = new WeakMap<CrashRecord, number | null>();
 const COMPASS_UPDATE_INTERVAL_MS = 220;
@@ -82,6 +91,7 @@ const HISTORICAL_WEATHER_MOVE_METRES = 100;
 const HISTORICAL_WEATHER_LOOKAHEAD_LIMIT = 20;
 const VOICE_REACTION_TIME_SECONDS = 1.5;
 const VOICE_CAR_LENGTH_METRES = 5;
+const DASHBOARD_WARNING_DISTANCE_METRES = 500;
 
 const SIMULATION_SPEED_SPIKES: Array<{
   segmentIndex: number;
@@ -364,6 +374,8 @@ function App() {
   const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [isSimulationDriving, setIsSimulationDriving] = useState(false);
   const [driveLocation, setDriveLocation] = useState<DriveLocation | null>(null);
+  const [dashboardWarningCountdown, setDashboardWarningCountdown] =
+    useState<DashboardWarningCountdown | null>(null);
   const [compassHeading, setCompassHeading] = useState<number | null>(null);
   const [driveError, setDriveError] = useState<string | null>(null);
   const [weatherState, setWeatherState] = useState<WeatherState>({
@@ -1032,7 +1044,7 @@ function App() {
 
   const dashboardWeatherMode: WeatherMatchMode = filters.weatherMode === "current" ? "weighted" : "all";
 
-  const dashboardLookaheadRisk = useMemo(
+  const calculatedDashboardLookaheadRisk = useMemo(
     () =>
       getDashboardLookaheadRisk(
         crashSpatialIndex,
@@ -1053,6 +1065,75 @@ function App() {
       isDriveModeActive,
     ],
   );
+
+  useEffect(() => {
+    if (
+      !isDriveModeActive ||
+      !driveLocation ||
+      !calculatedDashboardLookaheadRisk
+    ) {
+      setDashboardWarningCountdown(null);
+      return;
+    }
+
+    setDashboardWarningCountdown((current) => {
+      if (current?.status === "passed") {
+        return calculatedDashboardLookaheadRisk.riskLevel === "low" ? null : current;
+      }
+      if (!current) {
+        if (calculatedDashboardLookaheadRisk.riskLevel === "low") return null;
+        return {
+          status: "active",
+          remainingMetres: DASHBOARD_WARNING_DISTANCE_METRES,
+          lastLatitude: driveLocation.latitude,
+          lastLongitude: driveLocation.longitude,
+          risk: calculatedDashboardLookaheadRisk,
+        };
+      }
+
+      const travelledMetres = getDistanceMetres(
+        current.lastLatitude,
+        current.lastLongitude,
+        driveLocation.latitude,
+        driveLocation.longitude,
+      );
+      const remainingMetres = Math.max(0, current.remainingMetres - travelledMetres);
+
+      return {
+        status: remainingMetres <= 0 ? "passed" : current.status,
+        remainingMetres,
+        lastLatitude: driveLocation.latitude,
+        lastLongitude: driveLocation.longitude,
+        risk: current.risk,
+      };
+    });
+  }, [calculatedDashboardLookaheadRisk, driveLocation, isDriveModeActive]);
+
+  const dashboardLookaheadRisk = useMemo<DashboardLookaheadRisk | null>(() => {
+    if (!calculatedDashboardLookaheadRisk) return null;
+    if (dashboardWarningCountdown?.status === "passed") {
+      return {
+        ...calculatedDashboardLookaheadRisk,
+        riskLevel: "low",
+        label: "Low crash history ahead",
+        message: "No elevated history ahead",
+        nearestCrashDistanceMetres: undefined,
+      };
+    }
+    if (dashboardWarningCountdown?.status === "active") {
+      return {
+        ...dashboardWarningCountdown.risk,
+        nearestCrashDistanceMetres: dashboardWarningCountdown.remainingMetres,
+      };
+    }
+    if (calculatedDashboardLookaheadRisk.riskLevel !== "low") {
+      return {
+        ...calculatedDashboardLookaheadRisk,
+        nearestCrashDistanceMetres: DASHBOARD_WARNING_DISTANCE_METRES,
+      };
+    }
+    return calculatedDashboardLookaheadRisk;
+  }, [calculatedDashboardLookaheadRisk, dashboardWarningCountdown]);
 
   const startDriveMode = async () => {
     setDriveError(null);
@@ -1388,7 +1469,7 @@ function App() {
             <strong>{currentSpeedLabel}</strong>
             <small>km/h</small>
             <em className={`speed-overspeed ${overspeedDelta !== null ? "is-visible" : ""}`}>
-              {overspeedDelta !== null ? `+${overspeedDelta}km/h` : "+0km/h"}
+              {overspeedDelta !== null ? `+${overspeedDelta}km/h` : ""}
             </em>
           </div>
           <div>
