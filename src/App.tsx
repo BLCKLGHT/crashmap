@@ -70,6 +70,7 @@ type DashboardWarningCountdown = {
   remainingMetres: number;
   lastLatitude: number;
   lastLongitude: number;
+  passedMetres?: number;
   risk: DashboardLookaheadRisk;
 };
 
@@ -92,6 +93,7 @@ const HISTORICAL_WEATHER_LOOKAHEAD_LIMIT = 20;
 const VOICE_REACTION_TIME_SECONDS = 1.5;
 const VOICE_CAR_LENGTH_METRES = 5;
 const DASHBOARD_WARNING_DISTANCE_METRES = 500;
+const DASHBOARD_WARNING_REARM_METRES = 80;
 
 const SIMULATION_SPEED_SPIKES: Array<{
   segmentIndex: number;
@@ -1078,7 +1080,32 @@ function App() {
 
     setDashboardWarningCountdown((current) => {
       if (current?.status === "passed") {
-        return calculatedDashboardLookaheadRisk.riskLevel === "low" ? null : current;
+        if (calculatedDashboardLookaheadRisk.riskLevel === "low") return null;
+
+        const travelledMetres = getDistanceMetres(
+          current.lastLatitude,
+          current.lastLongitude,
+          driveLocation.latitude,
+          driveLocation.longitude,
+        );
+        const passedMetres = (current.passedMetres ?? 0) + travelledMetres;
+
+        if (passedMetres < DASHBOARD_WARNING_REARM_METRES) {
+          return {
+            ...current,
+            lastLatitude: driveLocation.latitude,
+            lastLongitude: driveLocation.longitude,
+            passedMetres,
+          };
+        }
+
+        return {
+          status: "active",
+          remainingMetres: DASHBOARD_WARNING_DISTANCE_METRES,
+          lastLatitude: driveLocation.latitude,
+          lastLongitude: driveLocation.longitude,
+          risk: calculatedDashboardLookaheadRisk,
+        };
       }
       if (!current) {
         if (calculatedDashboardLookaheadRisk.riskLevel === "low") return null;
@@ -1090,6 +1117,7 @@ function App() {
           risk: calculatedDashboardLookaheadRisk,
         };
       }
+      if (calculatedDashboardLookaheadRisk.riskLevel === "low") return null;
 
       const travelledMetres = getDistanceMetres(
         current.lastLatitude,
@@ -1104,6 +1132,7 @@ function App() {
         remainingMetres,
         lastLatitude: driveLocation.latitude,
         lastLongitude: driveLocation.longitude,
+        passedMetres: remainingMetres <= 0 ? 0 : current.passedMetres,
         risk: current.risk,
       };
     });

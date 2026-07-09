@@ -137,6 +137,19 @@ const getRoadHistoryHeadline = (
     : "Medium crash history";
 };
 
+const renderDistanceDigits = (value: string) =>
+  value.split("").map((character, index) => {
+    const positionFromRight = value.length - index - 1;
+    return (
+      <i
+        className="dashboard-odometer-digit"
+        key={`${positionFromRight}-${character}`}
+      >
+        {character}
+      </i>
+    );
+  });
+
 export function DashboardMode({
   isActive,
   isSimulation,
@@ -244,7 +257,7 @@ export function DashboardMode({
               <strong className="dashboard-history__distance" aria-label={distanceLabel}>
                 <span>{distanceParts.prefix}</span>
                 <b>
-                  <i key={distanceParts.value}>{distanceParts.value}</i>
+                  {renderDistanceDigits(distanceParts.value)}
                 </b>
                 <em>{distanceParts.unit}</em>
               </strong>

@@ -803,7 +803,7 @@ button:disabled {
 }
 
 .dashboard-history__distance b {
-  display: inline-grid;
+  display: inline-flex;
   min-width: 1.15em;
   overflow: hidden;
   perspective: 280px;
@@ -815,11 +815,13 @@ button:disabled {
   text-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
 }
 
-.dashboard-history__distance b i {
+.dashboard-odometer-digit {
   display: block;
+  min-width: 0.57em;
   font-style: normal;
   animation: dashboard-odometer-roll 360ms cubic-bezier(0.2, 0.75, 0.25, 1);
   transform-origin: 50% 50%;
+  text-align: center;
 }
 
 .dashboard-history__distance em {
