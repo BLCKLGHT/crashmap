@@ -12,12 +12,12 @@ export type VoiceWarningType =
   | "serious_crash_warning"
   | "wet_weather_match_warning"
   | "dark_condition_warning"
+  | "buddy_observation"
   | "calm_reminder";
 
 export type VoiceIntensity = "minimal" | "normal" | "detailed";
-export type DrivingCompanionMode = "off" | "minimal" | "normal" | "coaching";
+export type DrivingCompanionMode = "off" | "normal";
 export type DrivingCompanionVoice = "alloy" | "ash" | "ballad" | "coral" | "echo" | "sage" | "shimmer" | "verse";
-export type DrivingCompanionPersonality = "calm" | "standup" | "roast";
 export type DrivingCompanionSpeechSpeed = "normal" | "fast" | "faster";
 
 export type VoiceWarningSettings = {
@@ -33,9 +33,10 @@ export type VoiceWarningSettings = {
 export type DrivingCompanionSettings = {
   mode: DrivingCompanionMode;
   voice: DrivingCompanionVoice;
-  personality: DrivingCompanionPersonality;
   speechSpeed: DrivingCompanionSpeechSpeed;
   volume: number;
+  talkativeness: number;
+  buddyMode: boolean;
 };
 
 export type VoiceWarningEvent = {
@@ -78,9 +79,10 @@ export const DEFAULT_VOICE_WARNING_SETTINGS: VoiceWarningSettings = {
 export const DEFAULT_DRIVING_COMPANION_SETTINGS: DrivingCompanionSettings = {
   mode: "normal",
   voice: "alloy",
-  personality: "calm",
   speechSpeed: "fast",
   volume: 0.9,
+  talkativeness: 50,
+  buddyMode: false,
 };
 
 export const VOICE_WARNING_COOLDOWNS: Record<VoiceWarningType, number> = {
@@ -91,6 +93,7 @@ export const VOICE_WARNING_COOLDOWNS: Record<VoiceWarningType, number> = {
   serious_crash_warning: 120000,
   wet_weather_match_warning: 120000,
   dark_condition_warning: 120000,
+  buddy_observation: 240000,
   calm_reminder: 300000,
 };
 
@@ -127,6 +130,10 @@ const PHRASES: Record<VoiceWarningType, string[]> = {
     "This next section’s darker than it looks.",
     "Ease into the next section.",
   ],
+  buddy_observation: [
+    "Quiet stretch. Anything interesting happening today?",
+    "Nice bit of road through here.",
+  ],
   calm_reminder: [
     "Road history looks low through here.",
     "Nothing significant showing ahead.",
@@ -142,6 +149,7 @@ const PRIORITY: Record<VoiceWarningType, number> = {
   serious_crash_warning: 65,
   following_distance_warning: 60,
   dark_condition_warning: 55,
+  buddy_observation: 15,
   calm_reminder: 20,
 };
 
@@ -165,12 +173,14 @@ const canSpeakTypeForSettings = (
   if (
     settings.muteCrashHistoryWarnings &&
     type !== "speed_warning" &&
-    type !== "following_distance_warning" &&
-    type !== "calm_reminder"
+      type !== "following_distance_warning" &&
+      type !== "buddy_observation" &&
+      type !== "calm_reminder"
   ) {
     return false;
   }
   if (settings.muteCalmReminders && type === "calm_reminder") return false;
+  if (settings.muteCalmReminders && type === "buddy_observation") return false;
 
   if (settings.intensity === "minimal") {
     return (

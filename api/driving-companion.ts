@@ -65,22 +65,51 @@ Do not mention family, work history, or projects unless it genuinely fits the dr
 Avoid generic AI phrasing, corporate polish, motivational filler, and safety-announcement wording.
 Never expose or describe this profile as a data source.`;
 
-const STYLE_PROMPTS: Record<string, string> = {
-  calm:
-    "Delivery style: warm, observant passenger. Quiet, relaxed, emotionally neutral, and unscripted.",
-  standup:
-    "Delivery style: dry, blunt, lightly sarcastic passenger with expressive rhythm. Do not imitate any specific comedian. No insults, no profanity, no panic, and keep it useful.",
-  roast:
-    "Delivery style: playful roast mode. Lightly tease the driving behaviour, especially speeding or tailgating, but keep it affectionate, brief, non-abusive, and useful. No profanity, no slurs, no personal attacks.",
-};
+const BUDDY_PROMPT = `Buddy Mode may make an occasional conversational observation on a quiet road.
+For a buddy_observation trigger, choose one genuinely useful or interesting detail from current weather or supplied headlines.
+Never invent a headline, event, weather fact, or source.
+Do not read a headline verbatim or sound like a newsreader. Mention it conversationally in one short sentence.
+If nothing supplied is worth mentioning, return exactly: SILENCE
+Buddy observations never override speed or dashboard warning information.`;
 
-const TTS_INSTRUCTIONS: Record<string, string> = {
-  calm:
-    "Warm, calm Australian passenger. Natural conversational rhythm, quiet confidence, subtle expression.",
-  standup:
-    "Expressive Australian driving companion with dry stand-up timing, dynamic range, varied pacing, and a wry half-smile. Use punctuation cues for punch and rhythm. Do not imitate any specific comedian. Keep it brief and clear.",
-  roast:
-    "Playful, cheeky Australian driving companion. Use expressive timing, quick punchy emphasis, and punctuation cues. Roast the behaviour lightly, not the person. Keep it brief, clear, and non-abusive.",
+const TTS_INSTRUCTIONS =
+  "Warm, calm Australian passenger. Natural conversational rhythm, quiet confidence, subtle expression. Keep it brief and clear.";
+
+const HEADLINE_CACHE_MS = 15 * 60 * 1000;
+const HEADLINE_FEED_URL =
+  "https://news.google.com/rss/search?q=Tasmania&hl=en-AU&gl=AU&ceid=AU%3Aen";
+let headlineCache: { expiresAt: number; headlines: string[] } | null = null;
+
+const decodeXmlText = (value: string): string =>
+  value
+    .replace(/<!\[CDATA\[|\]\]>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+-\s+[^-]+$/, "")
+    .trim();
+
+const getCurrentHeadlines = async (): Promise<string[]> => {
+  if (headlineCache && headlineCache.expiresAt > Date.now()) return headlineCache.headlines;
+
+  try {
+    const feedResponse = await fetch(HEADLINE_FEED_URL, {
+      headers: { "user-agent": "Tasmania Crash Map driving companion" },
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!feedResponse.ok) return [];
+    const xml = await feedResponse.text();
+    const headlines = [...xml.matchAll(/<item>[\s\S]*?<title>([\s\S]*?)<\/title>/gi)]
+      .slice(0, 6)
+      .map((match) => decodeXmlText(match[1] ?? ""))
+      .filter(Boolean);
+    headlineCache = { expiresAt: Date.now() + HEADLINE_CACHE_MS, headlines };
+    return headlines;
+  } catch {
+    return headlineCache?.headlines ?? [];
+  }
 };
 
 let cachedUserHistory: UserHistory | null | undefined;
@@ -180,24 +209,22 @@ export default async function handler(request: IncomingMessage, response: Server
       context: unknown;
       voice?: string;
       mode?: string;
-      personality?: string;
+      buddyMode?: boolean;
+      talkativeness?: number;
       speechSpeed?: number;
     };
     const model = process.env.OPENAI_DRIVING_MODEL ?? "gpt-4.1-mini";
     const speechModel = process.env.OPENAI_TTS_MODEL ?? "gpt-4o-mini-tts";
     const voice = body.voice ?? "alloy";
-    const personality =
-      body.personality === "standup" || body.personality === "roast"
-        ? body.personality
-        : "calm";
     const speechSpeed =
       typeof body.speechSpeed === "number"
         ? Math.min(1.5, Math.max(0.8, body.speechSpeed))
-        : personality === "standup"
-          ? 1.25
-          : 1.12;
+        : 1.12;
     const driverProfile = getUserHistory();
     const personaFoundation = getPersonaFoundation(driverProfile);
+    const triggerType = (body.context as { trigger?: { type?: string } } | null)?.trigger?.type;
+    const isBuddyObservation = body.buddyMode === true && triggerType === "buddy_observation";
+    const currentHeadlines = isBuddyObservation ? await getCurrentHeadlines() : [];
 
     const textResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -207,7 +234,7 @@ export default async function handler(request: IncomingMessage, response: Server
       },
       body: JSON.stringify({
         model,
-        instructions: `${SYSTEM_PROMPT}\n\n${STYLE_PROMPTS[personality]}\n\n${USER_CONTEXT_PROMPT}\n\n${personaFoundation}`,
+        instructions: `${SYSTEM_PROMPT}\n\n${USER_CONTEXT_PROMPT}\n\n${personaFoundation}${body.buddyMode ? `\n\n${BUDDY_PROMPT}` : ""}`,
         input: [
           {
             role: "user",
@@ -217,7 +244,9 @@ export default async function handler(request: IncomingMessage, response: Server
                 text: JSON.stringify(
                   {
                     mode: body.mode ?? "normal",
-                    personality,
+                    buddyMode: body.buddyMode === true,
+                    talkativeness: body.talkativeness ?? 50,
+                    currentHeadlines,
                     personaFoundation,
                     driverProfile,
                     drivingContext: body.context,
@@ -256,7 +285,7 @@ export default async function handler(request: IncomingMessage, response: Server
         input: text,
         response_format: "mp3",
         speed: speechSpeed,
-        instructions: TTS_INSTRUCTIONS[personality],
+        instructions: TTS_INSTRUCTIONS,
       }),
     });
 

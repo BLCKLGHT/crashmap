@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Bot, Volume2, VolumeX } from "lucide-react";
 import type {
-  DrivingCompanionMode,
-  DrivingCompanionPersonality,
   DrivingCompanionSettings,
   DrivingCompanionSpeechSpeed,
   DrivingCompanionVoice,
@@ -93,19 +91,6 @@ export function VoiceSettings({
                 <span>{isSpeaking ? "Speaking" : "Ready"}</span>
               </div>
 
-              <div className="voice-settings__mode" role="radiogroup" aria-label="Driving companion mode">
-                {(["off", "minimal", "normal", "coaching"] as DrivingCompanionMode[]).map((mode) => (
-                  <button
-                    key={mode}
-                    className={settings.mode === mode ? "is-active" : ""}
-                    type="button"
-                    onClick={() => updateSetting("mode", mode)}
-                  >
-                    {mode === "off" ? "Off" : mode[0].toUpperCase() + mode.slice(1)}
-                  </button>
-                ))}
-              </div>
-
               <div className="voice-settings__actions">
                 <button
                   className="button button--primary"
@@ -119,22 +104,37 @@ export function VoiceSettings({
                 </button>
               </div>
 
-              <div className="voice-settings__mode" role="radiogroup" aria-label="Driving companion personality">
-                {([
-                  ["calm", "Calm"],
-                  ["standup", "Edgy comic"],
-                  ["roast", "Roast"],
-                ] as Array<[DrivingCompanionPersonality, string]>).map(([personality, label]) => (
-                  <button
-                    key={personality}
-                    className={settings.personality === personality ? "is-active" : ""}
-                    type="button"
-                    onClick={() => updateSetting("personality", personality)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <label className="voice-settings__range">
+                <span>
+                  <strong>Conversation</strong>
+                  <output>{settings.talkativeness <= 15 ? "Mostly silent" : settings.talkativeness >= 80 ? "Chatty" : "Balanced"}</output>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={settings.talkativeness}
+                  onChange={(event) => updateSetting("talkativeness", Number(event.target.value))}
+                  aria-label="Companion talkativeness"
+                />
+                <span className="voice-settings__range-labels">
+                  <small>Silent</small>
+                  <small>Chatty</small>
+                </span>
+              </label>
+
+              <label className="voice-settings__buddy">
+                <span>
+                  <strong>Buddy Mode</strong>
+                  <small>Occasional weather, headlines and observations on quiet stretches.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.buddyMode}
+                  onChange={(event) => updateSetting("buddyMode", event.target.checked)}
+                />
+              </label>
 
               <div className="voice-settings__mode" role="radiogroup" aria-label="Driving companion voice speed">
                 {([

@@ -67,6 +67,9 @@ const MAX_RISK_AGE_MS = 5000;
 const MIN_HUMAN_DELAY_MS = 150;
 const MAX_HUMAN_DELAY_MS = 650;
 const URGENT_WARNING_DISTANCE_METRES = 250;
+const DEFAULT_VOICE_PIPELINE_LATENCY_MS = 1800;
+const MIN_VOICE_PIPELINE_LATENCY_MS = 500;
+const MAX_VOICE_PIPELINE_LATENCY_MS = 5000;
 const SPEECH_SPEEDS: Record<DrivingCompanionSettings["speechSpeed"], number> = {
   normal: 1.12,
   fast: 1.25,
@@ -81,21 +84,28 @@ const toVoiceWarningSettings = (
   enabled: settings.mode !== "off",
   volume: settings.volume,
   intensity:
-    settings.mode === "minimal"
+    settings.talkativeness <= 25
       ? "minimal"
-      : settings.mode === "coaching"
+      : settings.talkativeness >= 70
         ? "detailed"
         : "normal",
   voiceURI: "",
-  muteCalmReminders: settings.mode !== "coaching",
+  muteCalmReminders: settings.talkativeness < 70 && !settings.buddyMode,
   muteSpeedWarnings: false,
   muteCrashHistoryWarnings: false,
 });
 
-const getPriorityThreshold = (mode: DrivingCompanionSettings["mode"]): number => {
-  if (mode === "minimal") return 80;
-  if (mode === "coaching") return 20;
-  return 60;
+const getPriorityThreshold = (talkativeness: number): number => {
+  if (talkativeness <= 10) return 100;
+  if (talkativeness <= 35) return 80;
+  if (talkativeness <= 65) return 60;
+  if (talkativeness <= 85) return 20;
+  return 10;
+};
+
+const getDuplicateCooldownMs = (talkativeness: number, isBuddyObservation: boolean): number => {
+  if (isBuddyObservation) return Math.round(420000 - talkativeness * 2400);
+  return Math.round(240000 - talkativeness * 1800);
 };
 
 const base64ToAudioUrl = (
@@ -178,7 +188,9 @@ const buildDrivingContextJson = (
 ): DrivingContextJson => ({
   speed: context.speedKmh,
   speedLimit: context.speedLimitKmh,
-  distanceToRiskMetres: context.lookaheadDistanceMetres,
+  distanceToRiskMetres:
+    context.dashboardDrivingState.distanceToUpcomingWarningMetres ??
+    context.lookaheadDistanceMetres,
   riskLevel: context.riskLevel,
   totalCrashesAhead: context.totalCrashCount,
   seriousCrashesAhead: context.seriousCount,
@@ -201,6 +213,35 @@ const buildDrivingContextJson = (
     severity: event.severity,
   },
 });
+
+const projectContextForVoiceLatency = (
+  drivingContext: DrivingContextJson,
+  latencyMs: number,
+): DrivingContextJson => {
+  const speedMetresPerSecond = Math.max(0, drivingContext.speed ?? 0) / 3.6;
+  const locationAgeMs = drivingContext.dashboardDrivingState.locationTimestamp
+    ? Math.max(0, Date.now() - drivingContext.dashboardDrivingState.locationTimestamp)
+    : 0;
+  const projectedTravelMetres =
+    speedMetresPerSecond * ((latencyMs + locationAgeMs) / 1000);
+  const projectDistance = (distance: number | undefined) =>
+    typeof distance === "number"
+      ? Math.max(0, Math.round(distance - projectedTravelMetres))
+      : undefined;
+  const projectedDistance = projectDistance(
+    drivingContext.dashboardDrivingState.distanceToUpcomingWarningMetres,
+  );
+
+  return {
+    ...drivingContext,
+    distanceToRiskMetres:
+      projectDistance(drivingContext.distanceToRiskMetres) ?? drivingContext.distanceToRiskMetres,
+    dashboardDrivingState: {
+      ...drivingContext.dashboardDrivingState,
+      distanceToUpcomingWarningMetres: projectedDistance,
+    },
+  };
+};
 
 const makeTestContext = (
   type: VoiceWarningType,
@@ -294,6 +335,7 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
   );
   const latestContextRef = useRef(context);
   const lastRequestRef = useRef<{ time: number; priority: number; contextKey: string } | null>(null);
+  const pipelineLatencyMsRef = useRef(DEFAULT_VOICE_PIPELINE_LATENCY_MS);
 
   const isSupported = typeof Audio !== "undefined" && typeof URL !== "undefined";
 
@@ -386,18 +428,21 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       }
 
       const now = Date.now();
+      const projectedDrivingContext = ignoreTiming
+        ? drivingContext
+        : projectContextForVoiceLatency(drivingContext, pipelineLatencyMsRef.current);
       const companionMode = settings.mode === "off" ? "normal" : settings.mode;
-      const isSpeedWarning = drivingContext.trigger.type === "speed_warning";
+      const isSpeedWarning = projectedDrivingContext.trigger.type === "speed_warning";
       const contextKey = JSON.stringify({
-        trigger: drivingContext.trigger.type,
-        risk: drivingContext.riskLevel,
-        fatal: drivingContext.fatalCrashesAhead,
-        serious: drivingContext.seriousCrashesAhead,
-        weather: drivingContext.weatherNow,
+        trigger: projectedDrivingContext.trigger.type,
+        risk: projectedDrivingContext.riskLevel,
+        fatal: projectedDrivingContext.fatalCrashesAhead,
+        serious: projectedDrivingContext.seriousCrashesAhead,
+        weather: projectedDrivingContext.weatherNow,
         speedDelta:
-          typeof drivingContext.speed === "number" &&
-          typeof drivingContext.speedLimit === "number"
-            ? Math.round(drivingContext.speed - drivingContext.speedLimit)
+          typeof projectedDrivingContext.speed === "number" &&
+          typeof projectedDrivingContext.speedLimit === "number"
+            ? Math.round(projectedDrivingContext.speed - projectedDrivingContext.speedLimit)
             : 0,
       });
       const lastRequest = lastRequestRef.current;
@@ -406,7 +451,11 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         !ignoreTiming &&
         lastRequest &&
         contextKey === lastRequest.contextKey &&
-        now - lastRequest.time < 120000
+        now - lastRequest.time <
+          getDuplicateCooldownMs(
+            settings.talkativeness,
+            projectedDrivingContext.trigger.type === "buddy_observation",
+          )
       ) {
         setDebugStatus("Suppressed by cooldown");
         logVoice("suppressed duplicate context", { contextKey });
@@ -433,11 +482,15 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       stopAudio();
       setError(null);
       setDebugStatus("Generating message");
-      logVoice("calling OpenAI", drivingContext.dashboardDrivingState);
+      logVoice("calling OpenAI", {
+        dashboard: projectedDrivingContext.dashboardDrivingState,
+        compensatedLatencyMs: pipelineLatencyMsRef.current,
+      });
 
       const controller = new AbortController();
       abortRef.current = controller;
       lastRequestRef.current = { time: now, priority, contextKey };
+      const pipelineStartedAt = performance.now();
 
       try {
         const response = await fetch("/api/driving-companion", {
@@ -445,10 +498,11 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
           headers: { "content-type": "application/json" },
           signal: controller.signal,
           body: JSON.stringify({
-            context: drivingContext,
+            context: projectedDrivingContext,
             mode: companionMode,
             voice: settings.voice,
-            personality: settings.personality,
+            buddyMode: settings.buddyMode,
+            talkativeness: settings.talkativeness,
             speechSpeed: SPEECH_SPEEDS[settings.speechSpeed],
           }),
         });
@@ -529,6 +583,22 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
         };
         audio.load();
         await waitForAudioReady(audio);
+        const measuredPipelineLatencyMs = performance.now() - pipelineStartedAt;
+        pipelineLatencyMsRef.current = Math.min(
+          MAX_VOICE_PIPELINE_LATENCY_MS,
+          Math.max(
+            MIN_VOICE_PIPELINE_LATENCY_MS,
+            pipelineLatencyMsRef.current * 0.35 + measuredPipelineLatencyMs * 0.65,
+          ),
+        );
+        if (!ignoreTiming && !isContextFresh(latestContextRef.current)) {
+          logVoice("cancelled audio because vehicle moved beyond current warning", {
+            measuredPipelineLatencyMs,
+            latest: latestContextRef.current.dashboardDrivingState,
+          });
+          stopAudio();
+          return;
+        }
         try {
           await audio.play();
         } catch (playError) {
@@ -571,8 +641,9 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       logVoice,
       revokeCurrentAudioUrl,
       settings.mode,
-      settings.personality,
+      settings.buddyMode,
       settings.speechSpeed,
+      settings.talkativeness,
       settings.voice,
       settings.volume,
       stopAudio,
@@ -583,8 +654,38 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
     latestContextRef.current = context;
     if (!context.isActive || settings.mode === "off") return;
 
-    const [event] = buildVoiceWarningEvents(context, warningSettings);
-    if (!event || event.priority < getPriorityThreshold(settings.mode)) return;
+    let [event] = buildVoiceWarningEvents(context, warningSettings);
+    if (
+      event?.type === "calm_reminder" &&
+      settings.buddyMode &&
+      settings.talkativeness >= 35
+    ) {
+      event = {
+        ...event,
+        type: "buddy_observation",
+        priority: 15,
+        message: "Quiet-road companion observation",
+      };
+    }
+    if (
+      !event &&
+      settings.buddyMode &&
+      settings.talkativeness >= 35 &&
+      context.riskLevel === "low"
+    ) {
+      event = {
+        type: "buddy_observation",
+        priority: 15,
+        severity: "low",
+        message: "Quiet-road companion observation",
+        segmentKey: context.segmentKey,
+      };
+    }
+    if (
+      !event ||
+      (event.type !== "speed_warning" &&
+        event.priority < getPriorityThreshold(settings.talkativeness))
+    ) return;
     logVoice("voice event created", event);
     if (!isContextFresh(context)) {
       setDebugStatus("Suppressed by cooldown");
@@ -648,7 +749,16 @@ export function useDrivingCompanion(context: VoiceWarningContext) {
       );
     }, delay);
     scheduledSpeechRef.current = { key: contextKey, priority: event.priority, timeoutId };
-  }, [context, isContextFresh, logVoice, requestAndPlay, settings.mode, warningSettings]);
+  }, [
+    context,
+    isContextFresh,
+    logVoice,
+    requestAndPlay,
+    settings.buddyMode,
+    settings.mode,
+    settings.talkativeness,
+    warningSettings,
+  ]);
 
   useEffect(
     () => () => {
