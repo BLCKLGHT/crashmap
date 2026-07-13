@@ -27,6 +27,7 @@ type DashboardModeProps = {
   isSimulationDriving: boolean;
   location: DriveLocation | null;
   driveRisk: DriveRiskSummary | null;
+  speedLimitLabel: string;
   lookaheadRisk: DashboardLookaheadRisk | null;
   drivingState: DashboardDrivingState;
   currentConditions: CurrentDrivingConditions | null;
@@ -37,6 +38,7 @@ type DashboardModeProps = {
   onStartSimulation: () => void;
   onToggleSimulationDrive: () => void;
   onStopDrive: () => void;
+  onMapboxSpeedLimitChange: (speedLimitKmh: number | null) => void;
 };
 
 const CAR_LENGTH_METRES = 5;
@@ -159,6 +161,7 @@ export function DashboardMode({
   isSimulationDriving,
   location,
   driveRisk,
+  speedLimitLabel,
   lookaheadRisk,
   drivingState,
   currentConditions,
@@ -169,8 +172,9 @@ export function DashboardMode({
   onStartSimulation,
   onToggleSimulationDrive,
   onStopDrive,
+  onMapboxSpeedLimitChange,
 }: DashboardModeProps) {
-  const speedZone = formatSpeedZone(driveRisk?.nearbySpeedZone);
+  const speedZone = formatSpeedZone(speedLimitLabel);
   const carLengths = drivingState.recommendedCarLengths;
   const visibleCars = getVisibleCarCount(carLengths);
   const hasMoreCarLengths = carLengths > 10;
@@ -188,9 +192,29 @@ export function DashboardMode({
   const transientTimeoutRef = useRef<number | null>(null);
   const distanceLabel = `${distanceParts.prefix} ${distanceParts.value} ${distanceParts.unit}`;
   const historyHeadline = getRoadHistoryHeadline(lookaheadRisk, currentConditions);
-  const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
+  const overspeedDelta = getOverspeedDeltaKmh(location?.speed, speedZone);
   const shouldShowWarning = hasUpcomingWarning && (isCloseWarning || isTransientWarningVisible);
   const warningStepKey = hasUpcomingWarning ? `${risk}:${distanceParts.value}` : "none";
+  const conditionIndicators = (
+    <>
+      <span title={currentConditions?.weatherLabel ?? "Weather unavailable"}>
+        {currentConditions?.isRaining ? (
+          <CloudRain size={26} aria-hidden="true" />
+        ) : (
+          <Cloud size={26} aria-hidden="true" />
+        )}
+        {typeof currentWeather?.temperature === "number" && (
+          <b>{Math.round(currentWeather.temperature)}°</b>
+        )}
+      </span>
+      {typeof currentWeather?.windSpeed === "number" && (
+        <span title={`Wind ${Math.round(currentWeather.windSpeed)} kilometres per hour`}>
+          <Wind size={26} aria-hidden="true" />
+          <b>{Math.round(currentWeather.windSpeed)}</b>
+        </span>
+      )}
+    </>
+  );
 
   useEffect(() => {
     if (transientTimeoutRef.current !== null) {
@@ -279,7 +303,11 @@ export function DashboardMode({
             location={location}
             drivingState={drivingState}
             isActive={isActive}
+            onSpeedLimitChange={onMapboxSpeedLimitChange}
           />
+        </div>
+        <div className="dashboard-history__conditions dashboard-history__conditions--persistent" aria-label="Current driving conditions">
+          {conditionIndicators}
         </div>
         <div
           className={`dashboard-history__warning ${
@@ -296,24 +324,6 @@ export function DashboardMode({
                 </b>
                 <em>{distanceParts.unit}</em>
               </strong>
-              <div className="dashboard-history__conditions" aria-label="Current driving conditions">
-                <span title={currentConditions?.weatherLabel ?? "Weather unavailable"}>
-                  {currentConditions?.isRaining ? (
-                    <CloudRain size={26} aria-hidden="true" />
-                  ) : (
-                    <Cloud size={26} aria-hidden="true" />
-                  )}
-                  {typeof currentWeather?.temperature === "number" && (
-                    <b>{Math.round(currentWeather.temperature)}°</b>
-                  )}
-                </span>
-                {typeof currentWeather?.windSpeed === "number" && (
-                  <span title={`Wind ${Math.round(currentWeather.windSpeed)} kilometres per hour`}>
-                    <Wind size={26} aria-hidden="true" />
-                    <b>{Math.round(currentWeather.windSpeed)}</b>
-                  </span>
-                )}
-              </div>
             </div>
             <h2>{historyHeadline}</h2>
         </div>

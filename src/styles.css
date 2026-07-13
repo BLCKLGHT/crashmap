@@ -843,7 +843,8 @@ button:disabled {
   align-self: start;
   align-content: start;
   gap: 0.5rem;
-  margin-top: clamp(0.25rem, 2.8vh, 1.65rem);
+  max-width: calc(100% - 5.5rem);
+  margin-top: clamp(-3.2rem, -4vh, -1.2rem);
   opacity: 0;
   transform: translateY(0.75rem) scale(0.985);
   transition:
@@ -928,6 +929,13 @@ button:disabled {
   align-items: stretch;
   justify-content: center;
   gap: 0.38rem;
+}
+
+.dashboard-history__conditions--persistent {
+  position: absolute;
+  top: clamp(-3rem, -4vh, -1.1rem);
+  right: 1rem;
+  z-index: 3;
 }
 
 .dashboard-history__conditions > span {

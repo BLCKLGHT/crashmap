@@ -12,6 +12,7 @@ type DashboardMapboxMapProps = {
   location: DriveLocation | null;
   drivingState: DashboardDrivingState;
   isActive: boolean;
+  onSpeedLimitChange?: (speedLimitKmh: number | null) => void;
 };
 
 type SmoothedDriveState = {
@@ -43,6 +44,12 @@ type WarningFeatureCollection = GeoJSON.FeatureCollection<
   GeoJSON.LineString,
   WarningFeatureProperties
 >;
+type MapboxMaxspeed = {
+  speed?: number;
+  unit?: "km/h" | "mph";
+  unknown?: boolean;
+  none?: boolean;
+};
 
 const DRIVE_CAMERA_PITCH = 60;
 const DRIVE_CAMERA_ZOOM = 16.5;
@@ -243,6 +250,19 @@ const getWarningScore = (level: WarningRoadSegment["warningLevel"]): number => {
   if (level === "high") return 1;
   if (level === "medium") return 0.62;
   return 0.25;
+};
+
+const getSpeedLimitFromMaxspeed = (maxspeeds?: MapboxMaxspeed[]): number | null => {
+  if (!maxspeeds?.length) return null;
+
+  for (const maxspeed of maxspeeds) {
+    if (maxspeed.unknown || maxspeed.none) continue;
+    if (typeof maxspeed.speed !== "number" || !Number.isFinite(maxspeed.speed)) continue;
+    if (maxspeed.unit === "mph") return Math.round(maxspeed.speed * 1.60934);
+    return Math.round(maxspeed.speed);
+  }
+
+  return null;
 };
 
 const interpolateCoordinate = (
@@ -492,6 +512,7 @@ export function DashboardMapboxMap({
   location,
   drivingState,
   isActive,
+  onSpeedLimitChange,
 }: DashboardMapboxMapProps) {
   const buildTimeToken = getMapboxToken();
   const [runtimeToken, setRuntimeToken] = useState<string | null>(buildTimeToken ?? null);
@@ -764,7 +785,7 @@ export function DashboardMapboxMap({
       6,
     )},${destination.latitude.toFixed(
       6,
-    )}?geometries=geojson&overview=full&steps=false&alternatives=false&access_token=${token}`;
+    )}?geometries=geojson&overview=full&steps=false&alternatives=false&annotations=maxspeed&access_token=${token}`;
 
     lastRouteRef.current = {
       time: now,
@@ -778,10 +799,18 @@ export function DashboardMapboxMap({
     void fetch(url, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`Directions failed with ${response.status}`);
-        return response.json() as Promise<{ routes?: Array<{ geometry?: GeoJSON.LineString }> }>;
+        return response.json() as Promise<{
+          routes?: Array<{
+            geometry?: GeoJSON.LineString;
+            legs?: Array<{ annotation?: { maxspeed?: MapboxMaxspeed[] } }>;
+          }>;
+        }>;
       })
       .then((payload) => {
-        const geometry = payload.routes?.[0]?.geometry;
+        const route = payload.routes?.[0];
+        const geometry = route?.geometry;
+        const speedLimit = getSpeedLimitFromMaxspeed(route?.legs?.[0]?.annotation?.maxspeed);
+        onSpeedLimitChange?.(speedLimit);
         if (geometry?.coordinates.length && geometry.coordinates.length >= 2) {
           setRouteAheadGeometry(geometry);
           lastRouteRef.current = {
@@ -802,11 +831,12 @@ export function DashboardMapboxMap({
           heading: currentLocation.heading,
           status: "failed",
         };
+        onSpeedLimitChange?.(null);
         if (import.meta.env.DEV) setStatus("directions-failed");
       });
 
     return () => controller.abort();
-  }, [currentLocation, drivingState.currentSpeed, isActive, token]);
+  }, [currentLocation, drivingState.currentSpeed, isActive, onSpeedLimitChange, token]);
 
   useEffect(() => {
     if (!currentLocation) return;

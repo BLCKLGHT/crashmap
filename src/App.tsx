@@ -377,6 +377,7 @@ function App() {
   const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [isSimulationDriving, setIsSimulationDriving] = useState(false);
   const [driveLocation, setDriveLocation] = useState<DriveLocation | null>(null);
+  const [mapboxSpeedLimitKmh, setMapboxSpeedLimitKmh] = useState<number | null>(null);
   const [dashboardWarningCountdown, setDashboardWarningCountdown] =
     useState<DashboardWarningCountdown | null>(null);
   const [compassHeading, setCompassHeading] = useState<number | null>(null);
@@ -1241,6 +1242,7 @@ function App() {
     setIsSimulationMode(false);
     setIsSimulationDriving(false);
     setDriveLocation(null);
+    setMapboxSpeedLimitKmh(null);
     setCompassHeading(null);
     lastGpsLocationRef.current = null;
     lastGpsUpdateRef.current = 0;
@@ -1274,10 +1276,13 @@ function App() {
   }, [compassHeading, driveLocation, isSimulationMode]);
 
   const currentSpeedLabel = formatSpeedKmh(displayedDriveLocation?.speed);
-  const currentSpeedZoneLabel = formatSpeedZone(driveRisk?.nearbySpeedZone);
+  const currentSpeedZoneLabel =
+    typeof mapboxSpeedLimitKmh === "number"
+      ? String(mapboxSpeedLimitKmh)
+      : formatSpeedZone(driveRisk?.nearbySpeedZone);
   const overspeedDelta = getOverspeedDeltaKmh(
     displayedDriveLocation?.speed,
-    driveRisk?.nearbySpeedZone,
+    currentSpeedZoneLabel,
   );
   const fatalProximityIntensity = getFatalProximityIntensity(driveRisk?.closestFatalMetres);
   const fatalProximityStyle = {
@@ -1296,7 +1301,7 @@ function App() {
       typeof displayedDriveLocation?.speed === "number"
         ? Math.round(Math.max(0, displayedDriveLocation.speed * 3.6))
         : undefined;
-    const speedLimit = parseSpeedLimitKmh(driveRisk?.nearbySpeedZone) ?? undefined;
+    const speedLimit = mapboxSpeedLimitKmh ?? parseSpeedLimitKmh(driveRisk?.nearbySpeedZone) ?? undefined;
     const level = dashboardLookaheadRisk?.riskLevel ?? "low";
     const distance =
       typeof dashboardLookaheadRisk?.nearestCrashDistanceMetres === "number"
@@ -1318,7 +1323,7 @@ function App() {
       locationTimestamp: displayedDriveLocation?.timestamp,
       riskTimestamp: dashboardLookaheadRisk ? Date.now() : undefined,
     };
-  }, [dashboardLookaheadRisk, displayedDriveLocation, driveRisk?.nearbySpeedZone]);
+  }, [dashboardLookaheadRisk, displayedDriveLocation, driveRisk?.nearbySpeedZone, mapboxSpeedLimitKmh]);
   const voiceContext = useMemo<VoiceWarningContext>(
     () => ({
       isActive: isDriveModeActive,
@@ -1440,6 +1445,7 @@ function App() {
           isSimulationDriving={isSimulationDriving}
           location={displayedDriveLocation}
           driveRisk={driveRisk}
+          speedLimitLabel={currentSpeedZoneLabel}
           lookaheadRisk={dashboardLookaheadRisk}
           drivingState={dashboardDrivingState}
           currentConditions={activeDrivingConditions}
@@ -1452,6 +1458,7 @@ function App() {
           onStartSimulation={startSimulationMode}
           onToggleSimulationDrive={toggleSimulationDrive}
           onStopDrive={stopDriveMode}
+          onMapboxSpeedLimitChange={setMapboxSpeedLimitKmh}
         />
       )}
 
