@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import {
   Car,
   CarFront,
@@ -40,6 +41,7 @@ type DashboardModeProps = {
 
 const CAR_LENGTH_METRES = 5;
 const REACTION_TIME_SECONDS = 1.5;
+const TRANSIENT_WARNING_DISPLAY_MS = 2400;
 
 const formatSpeedKmh = (speedMetresPerSecond?: number): string => {
   if (typeof speedMetresPerSecond !== "number" || !Number.isFinite(speedMetresPerSecond)) {
@@ -180,9 +182,40 @@ export function DashboardMode({
     typeof lookaheadRisk?.nearestCrashDistanceMetres === "number" &&
     lookaheadRisk.nearestCrashDistanceMetres <= 500;
   const distanceParts = getRoadHistoryDistanceParts(lookaheadRisk);
+  const steppedDistance = Number(distanceParts.value);
+  const isCloseWarning = hasUpcomingWarning && Number.isFinite(steppedDistance) && steppedDistance <= 100;
+  const [isTransientWarningVisible, setIsTransientWarningVisible] = useState(false);
+  const transientTimeoutRef = useRef<number | null>(null);
   const distanceLabel = `${distanceParts.prefix} ${distanceParts.value} ${distanceParts.unit}`;
   const historyHeadline = getRoadHistoryHeadline(lookaheadRisk, currentConditions);
   const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
+  const shouldShowWarning = hasUpcomingWarning && (isCloseWarning || isTransientWarningVisible);
+  const warningStepKey = hasUpcomingWarning ? `${risk}:${distanceParts.value}` : "none";
+
+  useEffect(() => {
+    if (transientTimeoutRef.current !== null) {
+      window.clearTimeout(transientTimeoutRef.current);
+      transientTimeoutRef.current = null;
+    }
+
+    if (!hasUpcomingWarning || isCloseWarning) {
+      setIsTransientWarningVisible(false);
+      return;
+    }
+
+    setIsTransientWarningVisible(true);
+    transientTimeoutRef.current = window.setTimeout(() => {
+      setIsTransientWarningVisible(false);
+      transientTimeoutRef.current = null;
+    }, TRANSIENT_WARNING_DISPLAY_MS);
+
+    return () => {
+      if (transientTimeoutRef.current !== null) {
+        window.clearTimeout(transientTimeoutRef.current);
+        transientTimeoutRef.current = null;
+      }
+    };
+  }, [hasUpcomingWarning, isCloseWarning, warningStepKey]);
 
   return (
     <section className={`dashboard-mode dashboard-mode--${risk}`}>
@@ -237,7 +270,7 @@ export function DashboardMode({
         </div>
       </div>
 
-      <div className={`dashboard-history ${hasUpcomingWarning ? "" : "dashboard-history--empty"}`}>
+      <div className={`dashboard-history ${shouldShowWarning ? "" : "dashboard-history--empty"}`}>
         <div
           className="dashboard-history__map is-visible"
           aria-hidden="true"
@@ -250,9 +283,9 @@ export function DashboardMode({
         </div>
         <div
           className={`dashboard-history__warning ${
-            hasUpcomingWarning ? "is-visible" : ""
+            shouldShowWarning ? "is-visible" : ""
           }`}
-          aria-hidden={!hasUpcomingWarning}
+          aria-hidden={!shouldShowWarning}
         >
             <span>Road history ahead</span>
             <div className="dashboard-history__distance-row">

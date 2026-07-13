@@ -840,8 +840,10 @@ button:disabled {
   position: relative;
   z-index: 2;
   display: grid;
-  align-content: center;
+  align-self: start;
+  align-content: start;
   gap: 0.5rem;
+  margin-top: clamp(0.25rem, 2.8vh, 1.65rem);
   opacity: 0;
   transform: translateY(0.75rem) scale(0.985);
   transition:
