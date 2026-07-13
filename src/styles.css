@@ -891,10 +891,10 @@ button:disabled {
   overflow: hidden;
   perspective: 280px;
   color: #fff;
-  font-size: clamp(4.8rem, 27vw, 9rem);
+  font-size: clamp(3.8rem, 20vw, 6.8rem);
   font-weight: 950;
   letter-spacing: 0;
-  line-height: 0.78;
+  line-height: 0.84;
   text-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
 }
 

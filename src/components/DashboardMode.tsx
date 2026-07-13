@@ -4,11 +4,9 @@ import {
   Cloud,
   CloudRain,
   FlaskConical,
-  Moon,
   Pause,
   Play,
   Square,
-  Sun,
   Wind,
 } from "lucide-react";
 import type {
@@ -181,9 +179,6 @@ export function DashboardMode({
   const distanceParts = getRoadHistoryDistanceParts(lookaheadRisk);
   const distanceLabel = `${distanceParts.prefix} ${distanceParts.value} ${distanceParts.unit}`;
   const historyHeadline = getRoadHistoryHeadline(lookaheadRisk, currentConditions);
-  const hasConditionData = lookaheadRisk?.conditionDataAvailable ?? false;
-  const matchedCrashCount = lookaheadRisk?.matchedCrashCount ?? 0;
-  const showMatchedStats = currentConditions !== null && hasConditionData;
   const overspeedDelta = getOverspeedDeltaKmh(location?.speed, driveRisk?.nearbySpeedZone);
 
   return (
@@ -276,16 +271,6 @@ export function DashboardMode({
                     <b>{Math.round(currentWeather.temperature)}°</b>
                   )}
                 </span>
-                <span
-                  className="dashboard-history__condition-icon-only"
-                  title={currentConditions?.lightCondition ?? "Light conditions unavailable"}
-                >
-                  {currentConditions?.lightCondition === "dark" ? (
-                    <Moon size={25} aria-hidden="true" />
-                  ) : (
-                    <Sun size={25} aria-hidden="true" />
-                  )}
-                </span>
                 {typeof currentWeather?.windSpeed === "number" && (
                   <span title={`Wind ${Math.round(currentWeather.windSpeed)} kilometres per hour`}>
                     <Wind size={26} aria-hidden="true" />
@@ -295,28 +280,6 @@ export function DashboardMode({
               </div>
             </div>
             <h2>{historyHeadline}</h2>
-            <div className="dashboard-history__stats">
-              <div>
-                <span>{showMatchedStats ? "Similar" : "Crashes"}</span>
-                <strong>{showMatchedStats ? matchedCrashCount : lookaheadRisk?.totalCrashCount ?? 0}</strong>
-              </div>
-              <div>
-                <span>Serious</span>
-                <strong>
-                  {showMatchedStats
-                    ? lookaheadRisk?.matchedSeriousCount ?? 0
-                    : lookaheadRisk?.seriousCount ?? 0}
-                </strong>
-              </div>
-              <div>
-                <span>Fatal</span>
-                <strong>
-                  {showMatchedStats
-                    ? lookaheadRisk?.matchedFatalCount ?? 0
-                    : lookaheadRisk?.fatalCount ?? 0}
-                </strong>
-              </div>
-            </div>
         </div>
         {isActive && (
           <div className="dashboard-history__controls" aria-label="Dashboard driving controls">
