@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { GeoJSONSource, Map as MapboxMap } from "mapbox-gl";
 import type {
+  CrashRecord,
   DashboardDrivingState,
   DriveLocation,
   WarningRoadSegment,
@@ -12,6 +13,7 @@ type DashboardMapboxMapProps = {
   location: DriveLocation | null;
   drivingState: DashboardDrivingState;
   isActive: boolean;
+  nearbyCrashes: CrashRecord[];
   onSpeedLimitChange?: (speedLimitKmh: number | null) => void;
 };
 
@@ -65,6 +67,9 @@ const DEFAULT_CENTRE: [number, number] = [146.6, -42.05];
 const SOURCE_ID = "dashboard-warning-road";
 const GLOW_LAYER_ID = "dashboard-warning-road-glow";
 const CORE_LAYER_ID = "dashboard-warning-road-core";
+const FATAL_SOURCE_ID = "dashboard-fatal-crashes";
+const FATAL_GLOW_LAYER_ID = "dashboard-fatal-crashes-glow";
+const FATAL_CORE_LAYER_ID = "dashboard-fatal-crashes-core";
 const MAP_MATCH_MIN_INTERVAL_MS = 4500;
 const MAP_MATCH_MIN_TRACE_POINTS = 4;
 const MAX_TRACE_POINTS = 10;
@@ -440,6 +445,28 @@ const createEmptyFeatureCollection = (): WarningFeatureCollection => ({
   features: [],
 });
 
+const isFatalCrashRecord = (crash: CrashRecord): boolean =>
+  (crash.severity ?? "").toLowerCase().includes("fatal");
+
+const toFatalFeatureCollection = (
+  crashes: CrashRecord[],
+): GeoJSON.FeatureCollection<GeoJSON.Point> => ({
+  type: "FeatureCollection",
+  features: crashes
+    .filter(isFatalCrashRecord)
+    .map((crash) => ({
+      type: "Feature",
+      properties: {
+        id: crash.id,
+        severity: crash.severity ?? "Fatal",
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [crash.longitude, crash.latitude],
+      },
+    })),
+});
+
 const applyCamera = (map: MapboxMap, smoothed: SmoothedDriveState): void => {
   const camera = getCameraSettings(smoothed.speedKmh);
   const centreAhead = getPointAhead(
@@ -512,6 +539,7 @@ export function DashboardMapboxMap({
   location,
   drivingState,
   isActive,
+  nearbyCrashes,
   onSpeedLimitChange,
 }: DashboardMapboxMapProps) {
   const buildTimeToken = getMapboxToken();
@@ -537,6 +565,7 @@ export function DashboardMapboxMap({
   } | null>(null);
   const sourceUpdatesRef = useRef(0);
   const warningSegmentsRef = useRef<WarningRoadSegment[]>([]);
+  const fatalCrashesRef = useRef<CrashRecord[]>([]);
   const [status, setStatus] = useState(token ? "loading" : "checking-token");
   const [isMapReady, setIsMapReady] = useState(false);
   const [routeAheadGeometry, setRouteAheadGeometry] = useState<GeoJSON.LineString | null>(null);
@@ -554,6 +583,7 @@ export function DashboardMapboxMap({
     [currentLocation, drivingState, routeAheadGeometry],
   );
   warningSegmentsRef.current = warningSegments;
+  fatalCrashesRef.current = nearbyCrashes;
 
   useEffect(() => {
     if (buildTimeToken || runtimeToken) return;
@@ -622,6 +652,10 @@ export function DashboardMapboxMap({
             type: "geojson",
             data: toFeatureCollection(warningSegmentsRef.current),
             lineMetrics: true,
+          });
+          map.addSource(FATAL_SOURCE_ID, {
+            type: "geojson",
+            data: toFatalFeatureCollection(fatalCrashesRef.current),
           });
           map.addLayer({
             id: GLOW_LAYER_ID,
@@ -708,6 +742,45 @@ export function DashboardMapboxMap({
               ],
             },
           });
+          map.addLayer({
+            id: FATAL_GLOW_LAYER_ID,
+            type: "circle",
+            source: FATAL_SOURCE_ID,
+            paint: {
+              "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                14,
+                10,
+                18,
+                22,
+              ],
+              "circle-color": "#ef4444",
+              "circle-opacity": 0.26,
+              "circle-blur": 0.45,
+            },
+          });
+          map.addLayer({
+            id: FATAL_CORE_LAYER_ID,
+            type: "circle",
+            source: FATAL_SOURCE_ID,
+            paint: {
+              "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                14,
+                4,
+                18,
+                8,
+              ],
+              "circle-color": "#ef4444",
+              "circle-stroke-color": "rgba(255, 255, 255, 0.92)",
+              "circle-stroke-width": 1.8,
+              "circle-opacity": 0.96,
+            },
+          });
           setStatus("ready");
           setIsMapReady(true);
           window.requestAnimationFrame(() => {
@@ -744,6 +817,15 @@ export function DashboardMapboxMap({
     source.setData(toFeatureCollection(warningSegments));
     sourceUpdatesRef.current += 1;
   }, [isMapReady, warningSegments]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady || !map.isStyleLoaded()) return;
+    const source = map.getSource(FATAL_SOURCE_ID) as GeoJSONSource | undefined;
+    if (!source) return;
+
+    source.setData(toFatalFeatureCollection(nearbyCrashes));
+  }, [isMapReady, nearbyCrashes]);
 
   useEffect(() => {
     if (!token || !currentLocation || !isActive) return;

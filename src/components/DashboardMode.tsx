@@ -303,6 +303,7 @@ export function DashboardMode({
             location={location}
             drivingState={drivingState}
             isActive={isActive}
+            nearbyCrashes={driveRisk?.nearbyCrashes ?? []}
             onSpeedLimitChange={onMapboxSpeedLimitChange}
           />
         </div>
