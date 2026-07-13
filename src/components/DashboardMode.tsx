@@ -20,7 +20,7 @@ import type {
   DriveRiskSummary,
   WeatherState,
 } from "../types/crash";
-import { DashboardMiniMap } from "./DashboardMiniMap";
+import { DashboardMapboxMap } from "./DashboardMapboxMap";
 
 type DashboardModeProps = {
   isActive: boolean;
@@ -241,10 +241,14 @@ export function DashboardMode({
 
       <div className={`dashboard-history ${hasUpcomingWarning ? "" : "dashboard-history--empty"}`}>
         <div
-          className={`dashboard-history__map ${hasUpcomingWarning ? "" : "is-visible"}`}
+          className="dashboard-history__map is-visible"
           aria-hidden="true"
         >
-          <DashboardMiniMap location={location} />
+          <DashboardMapboxMap
+            location={location}
+            drivingState={drivingState}
+            isActive={isActive}
+          />
         </div>
         <div
           className={`dashboard-history__warning ${

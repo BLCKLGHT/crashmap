@@ -141,6 +141,17 @@ export type DashboardCrashRiskLevel = "low" | "medium" | "high";
 export type DashboardWarningColour = "blue" | "orange" | "red";
 export type DashboardZoneType = "corner" | "section" | "straight" | "intersection" | "unknown";
 
+export type WarningRoadSegment = {
+  id: string;
+  geometry: GeoJSON.LineString;
+  warningLevel: DashboardCrashRiskLevel;
+  warningColour: DashboardWarningColour;
+  startDistanceMetres: number;
+  endDistanceMetres: number;
+  score: number;
+  sourceTimestamp: number;
+};
+
 export type DashboardDrivingState = {
   currentSpeed?: number;
   speedLimit?: number;
@@ -153,8 +164,13 @@ export type DashboardDrivingState = {
   upcomingZoneType: DashboardZoneType;
   optionalLandmark?: string;
   heading?: number;
+  snappedPosition?: {
+    latitude: number;
+    longitude: number;
+  };
   locationTimestamp?: number;
   riskTimestamp?: number;
+  warningRoadSegments?: WarningRoadSegment[];
 };
 
 export type DashboardLookaheadRisk = {
