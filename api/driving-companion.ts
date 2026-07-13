@@ -72,8 +72,21 @@ Do not read a headline verbatim or sound like a newsreader. Mention it conversat
 If nothing supplied is worth mentioning, return exactly: SILENCE
 Buddy observations never override speed or dashboard warning information.`;
 
+const ENGINEER_PROMPT = `Engineer Mode changes the delivery style.
+You are still calm and historical-road-aware, but speak like a concise race engineer or rally-style navigator.
+Give useful driving rhythm notes: speed into the next section, whether to ease off, hold steady, leave room, or settle the car.
+Use dashboardDrivingState for current speed, speed limit, upcomingZoneType, warning colour, distance, car lengths, weather, and whether the driver has slowed.
+Mention corner or section type when useful: corner, section, straight, intersection.
+Use short phrases like: "Orange section ahead, ease in", "Hold fifty, next corner tightens", "Wet road, leave margin", "Speed's tidy, keep it smooth".
+Do not pretend this is a race, do not encourage aggressive driving, and do not use racing jargon that increases risk.
+Never imply live hazard detection or turn-by-turn navigation.
+Maximum 14 words.`;
+
 const TTS_INSTRUCTIONS =
   "Warm, calm Australian passenger. Natural conversational rhythm, quiet confidence, subtle expression. Keep it brief and clear.";
+
+const ENGINEER_TTS_INSTRUCTIONS =
+  "Calm Australian race engineer style. Concise, focused, measured, confident. Slight urgency when useful, never panicked.";
 
 const HEADLINE_CACHE_MS = 15 * 60 * 1000;
 const HEADLINE_FEED_URL =
@@ -210,6 +223,7 @@ export default async function handler(request: IncomingMessage, response: Server
       voice?: string;
       mode?: string;
       buddyMode?: boolean;
+      engineerMode?: boolean;
       talkativeness?: number;
       speechSpeed?: number;
     };
@@ -225,6 +239,7 @@ export default async function handler(request: IncomingMessage, response: Server
     const triggerType = (body.context as { trigger?: { type?: string } } | null)?.trigger?.type;
     const isBuddyObservation = body.buddyMode === true && triggerType === "buddy_observation";
     const currentHeadlines = isBuddyObservation ? await getCurrentHeadlines() : [];
+    const isEngineerMode = body.engineerMode === true;
 
     const textResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -234,7 +249,7 @@ export default async function handler(request: IncomingMessage, response: Server
       },
       body: JSON.stringify({
         model,
-        instructions: `${SYSTEM_PROMPT}\n\n${USER_CONTEXT_PROMPT}\n\n${personaFoundation}${body.buddyMode ? `\n\n${BUDDY_PROMPT}` : ""}`,
+        instructions: `${SYSTEM_PROMPT}\n\n${USER_CONTEXT_PROMPT}\n\n${personaFoundation}${body.buddyMode ? `\n\n${BUDDY_PROMPT}` : ""}${isEngineerMode ? `\n\n${ENGINEER_PROMPT}` : ""}`,
         input: [
           {
             role: "user",
@@ -245,6 +260,7 @@ export default async function handler(request: IncomingMessage, response: Server
                   {
                     mode: body.mode ?? "normal",
                     buddyMode: body.buddyMode === true,
+                    engineerMode: isEngineerMode,
                     talkativeness: body.talkativeness ?? 50,
                     currentHeadlines,
                     personaFoundation,
@@ -285,7 +301,7 @@ export default async function handler(request: IncomingMessage, response: Server
         input: text,
         response_format: "mp3",
         speed: speechSpeed,
-        instructions: TTS_INSTRUCTIONS,
+        instructions: isEngineerMode ? ENGINEER_TTS_INSTRUCTIONS : TTS_INSTRUCTIONS,
       }),
     });
 

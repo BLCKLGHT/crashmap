@@ -99,6 +99,7 @@ const toVoiceWarningSettings = (
         ? "detailed"
         : "normal",
   voiceURI: "",
+  engineerMode: settings.engineerMode,
   muteCalmReminders: settings.talkativeness < 70 && !settings.buddyMode,
   muteSpeedWarnings: false,
   muteCrashHistoryWarnings: false,
@@ -461,6 +462,7 @@ export function useDrivingCompanion(
           mode: companionMode,
           voice: settings.voice,
           buddyMode: settings.buddyMode,
+          engineerMode: settings.engineerMode,
           talkativeness: settings.talkativeness,
           speechSpeed: SPEECH_SPEEDS[settings.speechSpeed],
         }),
@@ -475,6 +477,7 @@ export function useDrivingCompanion(
     },
     [
       settings.buddyMode,
+      settings.engineerMode,
       settings.mode,
       settings.speechSpeed,
       settings.talkativeness,
@@ -827,6 +830,22 @@ export function useDrivingCompanion(
     }
     if (
       !event &&
+      settings.engineerMode &&
+      settings.talkativeness >= 25 &&
+      (context.dashboardDrivingState.currentSpeed ||
+        context.dashboardDrivingState.upcomingZoneType !== "section" ||
+        context.currentConditions?.surfaceCondition === "wet")
+    ) {
+      event = {
+        type: "engineer_callout",
+        priority: 68,
+        severity: context.riskLevel === "high" ? "high" : "medium",
+        message: "Engineer driving callout",
+        segmentKey: context.segmentKey,
+      };
+    }
+    if (
+      !event &&
       settings.buddyMode &&
       settings.talkativeness >= 35 &&
       context.riskLevel === "low"
@@ -913,6 +932,7 @@ export function useDrivingCompanion(
     logVoice,
     requestAndPlay,
     settings.buddyMode,
+    settings.engineerMode,
     settings.mode,
     settings.talkativeness,
     warningSettings,

@@ -38,6 +38,7 @@ const TEST_TYPES: Array<{ type: VoiceWarningType; label: string }> = [
   { type: "fatal_history_warning", label: "Fatal ahead" },
   { type: "wet_weather_match_warning", label: "Heavy rain" },
   { type: "wet_weather_match_warning", label: "Wet match" },
+  { type: "engineer_callout", label: "Engineer" },
   { type: "crash_history_warning", label: "High history" },
   { type: "calm_reminder", label: "Quiet road" },
 ];
@@ -133,6 +134,18 @@ export function VoiceSettings({
                   type="checkbox"
                   checked={settings.buddyMode}
                   onChange={(event) => updateSetting("buddyMode", event.target.checked)}
+                />
+              </label>
+
+              <label className="voice-settings__buddy">
+                <span>
+                  <strong>Engineer Mode</strong>
+                  <small>F1-style speed, corner, weather and driving rhythm advice.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.engineerMode}
+                  onChange={(event) => updateSetting("engineerMode", event.target.checked)}
                 />
               </label>
 

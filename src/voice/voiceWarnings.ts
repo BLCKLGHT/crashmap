@@ -12,6 +12,7 @@ export type VoiceWarningType =
   | "serious_crash_warning"
   | "wet_weather_match_warning"
   | "dark_condition_warning"
+  | "engineer_callout"
   | "buddy_observation"
   | "calm_reminder";
 
@@ -25,6 +26,7 @@ export type VoiceWarningSettings = {
   volume: number;
   intensity: VoiceIntensity;
   voiceURI: string;
+  engineerMode: boolean;
   muteCalmReminders: boolean;
   muteSpeedWarnings: boolean;
   muteCrashHistoryWarnings: boolean;
@@ -37,6 +39,7 @@ export type DrivingCompanionSettings = {
   volume: number;
   talkativeness: number;
   buddyMode: boolean;
+  engineerMode: boolean;
 };
 
 export type VoiceWarningEvent = {
@@ -71,6 +74,7 @@ export const DEFAULT_VOICE_WARNING_SETTINGS: VoiceWarningSettings = {
   volume: 0.85,
   intensity: "normal",
   voiceURI: "",
+  engineerMode: false,
   muteCalmReminders: false,
   muteSpeedWarnings: false,
   muteCrashHistoryWarnings: false,
@@ -83,6 +87,7 @@ export const DEFAULT_DRIVING_COMPANION_SETTINGS: DrivingCompanionSettings = {
   volume: 0.9,
   talkativeness: 50,
   buddyMode: false,
+  engineerMode: false,
 };
 
 export const VOICE_WARNING_COOLDOWNS: Record<VoiceWarningType, number> = {
@@ -93,6 +98,7 @@ export const VOICE_WARNING_COOLDOWNS: Record<VoiceWarningType, number> = {
   serious_crash_warning: 120000,
   wet_weather_match_warning: 120000,
   dark_condition_warning: 120000,
+  engineer_callout: 45000,
   buddy_observation: 240000,
   calm_reminder: 300000,
 };
@@ -130,6 +136,11 @@ const PHRASES: Record<VoiceWarningType, string[]> = {
     "This next section’s darker than it looks.",
     "Ease into the next section.",
   ],
+  engineer_callout: [
+    "Next section’s coming up. Speed looks tidy.",
+    "Bring it in smooth, then let it settle.",
+    "Weather’s part of the equation here.",
+  ],
   buddy_observation: [
     "Quiet stretch. Anything interesting happening today?",
     "Nice bit of road through here.",
@@ -149,6 +160,7 @@ const PRIORITY: Record<VoiceWarningType, number> = {
   serious_crash_warning: 65,
   following_distance_warning: 60,
   dark_condition_warning: 55,
+  engineer_callout: 68,
   buddy_observation: 15,
   calm_reminder: 20,
 };
@@ -181,6 +193,7 @@ const canSpeakTypeForSettings = (
   }
   if (settings.muteCalmReminders && type === "calm_reminder") return false;
   if (settings.muteCalmReminders && type === "buddy_observation") return false;
+  if (type === "engineer_callout") return settings.engineerMode;
 
   if (settings.intensity === "minimal") {
     return (
@@ -277,6 +290,16 @@ export const buildVoiceWarningEvents = (
         ? "Wet road. Leave more room than usual."
         : undefined;
     events.push(makeEvent("following_distance_warning", segmentKey, "low", phrase));
+  }
+
+  if (
+    settings.engineerMode &&
+    (context.riskLevel !== "low" ||
+      speedDelta >= 1 ||
+      context.carLengths >= 5 ||
+      context.currentConditions?.surfaceCondition === "wet")
+  ) {
+    events.push(makeEvent("engineer_callout", segmentKey, context.riskLevel === "high" ? "high" : "medium"));
   }
 
   if (context.riskLevel === "low" && context.totalCrashCount === 0) {
