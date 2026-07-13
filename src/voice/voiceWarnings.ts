@@ -252,8 +252,6 @@ export const buildVoiceWarningEvents = (
     events.push(makeEvent("speed_warning", segmentKey, "high", pickVoicePhrase("speed_warning", 2)));
   } else if (speedDelta >= 7) {
     events.push(makeEvent("speed_warning", segmentKey, "medium", pickVoicePhrase("speed_warning", 1)));
-  } else if (speedDelta >= 3) {
-    events.push(makeEvent("speed_warning", segmentKey, "low", pickVoicePhrase("speed_warning", 0)));
   }
 
   if (context.fatalCount >= 1) {

@@ -66,6 +66,11 @@ type NavigatorWithAudioSession = Navigator & {
   };
 };
 
+type WindowWithWebAudio = Window & {
+  AudioContext?: typeof AudioContext;
+  webkitAudioContext?: typeof AudioContext;
+};
+
 const MIN_REQUEST_INTERVAL_MS = 20000;
 const MAX_LOCATION_AGE_MS = 3000;
 const MAX_RISK_AGE_MS = 5000;
@@ -79,6 +84,8 @@ const VOICE_PREFETCH_MIN_DISTANCE_METRES = 500;
 const VOICE_PREFETCH_MAX_DISTANCE_METRES = 820;
 const VOICE_PREFETCH_SPOKEN_DISTANCE_METRES = 500;
 const VOICE_PREFETCH_MAX_AGE_MS = 90000;
+const SPEED_CUE_COOLDOWN_MS = 12000;
+const SPEED_STRONG_CUE_COOLDOWN_MS = 18000;
 const SPEECH_SPEEDS: Record<DrivingCompanionSettings["speechSpeed"], number> = {
   normal: 1.12,
   fast: 1.25,
@@ -354,6 +361,7 @@ export function useDrivingCompanion(
   const [debugStatus, setDebugStatus] = useState<VoiceDebugStatus>("Waiting for user enable gesture");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const cueAudioContextRef = useRef<AudioContext | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const lastMessagesRef = useRef<string[]>([]);
   const previousRoadEventsRef = useRef<string[]>([]);
@@ -368,6 +376,10 @@ export function useDrivingCompanion(
   const pipelineLatencyMsRef = useRef(DEFAULT_VOICE_PIPELINE_LATENCY_MS);
   const cachedCompanionResponsesRef = useRef(new Map<string, CachedCompanionResponse>());
   const pendingPrefetchKeysRef = useRef(new Set<string>());
+  const lastSpeedCueRef = useRef<{ band: "none" | "over" | "strong"; time: number }>({
+    band: "none",
+    time: 0,
+  });
 
   const isSupported = typeof Audio !== "undefined" && typeof URL !== "undefined";
 
@@ -383,6 +395,51 @@ export function useDrivingCompanion(
   const logVoice = useCallback((message: string, payload?: unknown) => {
     if (import.meta.env.DEV) console.debug(`[voice] ${message}`, payload ?? "");
   }, []);
+
+  const getCueAudioContext = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    if (cueAudioContextRef.current) return cueAudioContextRef.current;
+    const AudioContextConstructor =
+      window.AudioContext ?? (window as WindowWithWebAudio).webkitAudioContext;
+    if (!AudioContextConstructor) return null;
+    cueAudioContextRef.current = new AudioContextConstructor();
+    return cueAudioContextRef.current;
+  }, []);
+
+  const playSpeedCue = useCallback(
+    (band: "over" | "strong") => {
+      const audioContext = getCueAudioContext();
+      if (!audioContext) return;
+
+      const play = () => {
+        const now = audioContext.currentTime;
+        const masterGain = audioContext.createGain();
+        masterGain.gain.setValueAtTime(0.0001, now);
+        masterGain.gain.exponentialRampToValueAtTime(settings.volume * (band === "strong" ? 0.28 : 0.18), now + 0.015);
+        masterGain.gain.exponentialRampToValueAtTime(0.0001, now + (band === "strong" ? 0.42 : 0.22));
+        masterGain.connect(audioContext.destination);
+
+        const tones = band === "strong" ? [740, 980] : [660];
+        tones.forEach((frequency, index) => {
+          const oscillator = audioContext.createOscillator();
+          oscillator.type = band === "strong" ? "triangle" : "sine";
+          oscillator.frequency.setValueAtTime(frequency, now + index * 0.11);
+          oscillator.connect(masterGain);
+          oscillator.start(now + index * 0.11);
+          oscillator.stop(now + index * 0.11 + 0.16);
+        });
+      };
+
+      if (audioContext.state === "suspended") {
+        void audioContext.resume().then(play).catch((caughtError) => {
+          logVoice("speed cue blocked", caughtError);
+        });
+        return;
+      }
+      play();
+    },
+    [getCueAudioContext, logVoice, settings.volume],
+  );
 
   const isContextFresh = useCallback((candidate: VoiceWarningContext): boolean => {
     const now = Date.now();
@@ -440,6 +497,10 @@ export function useDrivingCompanion(
       setIsAudioUnlocked(true);
       setDebugStatus("Voice ready");
       setError(null);
+      const cueAudioContext = getCueAudioContext();
+      if (cueAudioContext?.state === "suspended") {
+        await cueAudioContext.resume().catch(() => undefined);
+      }
       return true;
     } catch {
       audio.volume = settings.volume;
@@ -448,7 +509,7 @@ export function useDrivingCompanion(
       setError("Audio playback was blocked. Tap Enable companion or Test voice while the app is open.");
       return false;
     }
-  }, [isSupported, settings.volume]);
+  }, [getCueAudioContext, isSupported, settings.volume]);
 
   const fetchCompanionPayload = useCallback(
     async (drivingContext: DrivingContextJson, signal?: AbortSignal): Promise<CompanionResponse> => {
@@ -809,6 +870,43 @@ export function useDrivingCompanion(
     settings.mode,
     settings.talkativeness,
     warningSettings,
+  ]);
+
+  useEffect(() => {
+    latestContextRef.current = context;
+    if (!context.isActive || settings.mode === "off" || !isAudioUnlocked) {
+      lastSpeedCueRef.current.band = "none";
+      return;
+    }
+
+    const speedDelta =
+      typeof context.speedKmh === "number" && typeof context.speedLimitKmh === "number"
+        ? context.speedKmh - context.speedLimitKmh
+        : 0;
+
+    if (speedDelta <= 0) {
+      lastSpeedCueRef.current.band = "none";
+      return;
+    }
+
+    const band = speedDelta >= 7 ? "strong" : "over";
+    const now = Date.now();
+    const lastCue = lastSpeedCueRef.current;
+    const cooldown = band === "strong" ? SPEED_STRONG_CUE_COOLDOWN_MS : SPEED_CUE_COOLDOWN_MS;
+    const crossedIntoOverLimit = lastCue.band === "none";
+    const escalatedToStrongCue = band === "strong" && lastCue.band !== "strong";
+
+    if (crossedIntoOverLimit || escalatedToStrongCue || now - lastCue.time >= cooldown) {
+      playSpeedCue(band);
+      lastSpeedCueRef.current = { band, time: now };
+      logVoice("speed cue played", { band, speedDelta: Math.round(speedDelta) });
+    }
+  }, [
+    context,
+    isAudioUnlocked,
+    logVoice,
+    playSpeedCue,
+    settings.mode,
   ]);
 
   useEffect(() => {
