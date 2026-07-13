@@ -64,6 +64,9 @@ const MAX_TRACE_POINTS = 10;
 const MAP_LOAD_TIMEOUT_MS = 3500;
 const TERRAIN_SOURCE_ID = "dashboard-mapbox-terrain";
 const BUILDINGS_LAYER_ID = "dashboard-mapbox-buildings";
+const ROUTE_AHEAD_MIN_INTERVAL_MS = 3500;
+const ROUTE_AHEAD_MIN_MOVE_METRES = 18;
+const ROUTE_AHEAD_MIN_HEADING_DEGREES = 8;
 
 const getMapboxToken = (): string | undefined => {
   const meta = import.meta as ImportMeta & {
@@ -242,9 +245,102 @@ const getWarningScore = (level: WarningRoadSegment["warningLevel"]): number => {
   return 0.25;
 };
 
+const interpolateCoordinate = (
+  from: number[],
+  to: number[],
+  ratio: number,
+): number[] => [
+  from[0] + (to[0] - from[0]) * ratio,
+  from[1] + (to[1] - from[1]) * ratio,
+];
+
+const sliceLineByDistance = (
+  geometry: GeoJSON.LineString,
+  startDistanceMetres: number,
+  endDistanceMetres: number,
+): GeoJSON.LineString | null => {
+  const coordinates = geometry.coordinates;
+  if (coordinates.length < 2 || endDistanceMetres <= startDistanceMetres) return null;
+
+  const sliced: number[][] = [];
+  let travelledMetres = 0;
+
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const from = coordinates[index - 1];
+    const to = coordinates[index];
+    const segmentDistance = getDistanceMetres(from[1], from[0], to[1], to[0]);
+    const segmentStart = travelledMetres;
+    const segmentEnd = travelledMetres + segmentDistance;
+
+    if (segmentEnd >= startDistanceMetres && segmentStart <= endDistanceMetres) {
+      const startRatio =
+        segmentDistance > 0
+          ? Math.max(0, (startDistanceMetres - segmentStart) / segmentDistance)
+          : 0;
+      const endRatio =
+        segmentDistance > 0
+          ? Math.min(1, (endDistanceMetres - segmentStart) / segmentDistance)
+          : 1;
+      const start = interpolateCoordinate(from, to, startRatio);
+      const end = interpolateCoordinate(from, to, endRatio);
+
+      if (!sliced.length) sliced.push(start);
+      sliced.push(end);
+    }
+
+    travelledMetres = segmentEnd;
+    if (travelledMetres > endDistanceMetres) break;
+  }
+
+  return sliced.length >= 2
+    ? {
+        type: "LineString",
+        coordinates: sliced,
+      }
+    : null;
+};
+
+const getLineDistanceMetres = (geometry: GeoJSON.LineString): number =>
+  geometry.coordinates.reduce((total, coordinate, index, coordinates) => {
+    if (index === 0) return total;
+    const previous = coordinates[index - 1];
+    return total + getDistanceMetres(previous[1], previous[0], coordinate[1], coordinate[0]);
+  }, 0);
+
+const getNearestRoutePoint = (
+  geometry: GeoJSON.LineString | null,
+  location: SmoothedDriveState,
+): SmoothedDriveState => {
+  if (!geometry?.coordinates.length) return location;
+
+  let nearest = geometry.coordinates[0];
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const coordinate of geometry.coordinates) {
+    const distance = getDistanceMetres(
+      location.latitude,
+      location.longitude,
+      coordinate[1],
+      coordinate[0],
+    );
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = coordinate;
+    }
+  }
+
+  if (nearestDistance > 65) return location;
+
+  return {
+    ...location,
+    latitude: nearest[1],
+    longitude: nearest[0],
+  };
+};
+
 const buildFallbackSegments = (
   origin: SmoothedDriveState | null,
   drivingState: DashboardDrivingState,
+  routeAheadGeometry: GeoJSON.LineString | null,
 ): WarningRoadSegment[] => {
   if (!origin) return [];
   if (drivingState.warningRoadSegments?.length) return drivingState.warningRoadSegments;
@@ -255,11 +351,19 @@ const buildFallbackSegments = (
   const now = drivingState.riskTimestamp ?? Date.now();
   const warningDistance = drivingState.distanceToUpcomingWarningMetres;
   const warningLevel = drivingState.upcomingWarningLevel;
+  const routeGeometry =
+    routeAheadGeometry && routeAheadGeometry.coordinates.length >= 2
+      ? routeAheadGeometry
+      : null;
+  const routeDistance = routeGeometry ? getLineDistanceMetres(routeGeometry) : 0;
+  const contextGeometry = routeGeometry
+    ? sliceLineByDistance(routeGeometry, 0, Math.min(lookaheadDistance, routeDistance))
+    : null;
 
   const segments: WarningRoadSegment[] = [
     {
       id: "dashboard-road-context",
-      geometry: buildCorridorLine(origin, heading, 0, lookaheadDistance),
+      geometry: contextGeometry ?? buildCorridorLine(origin, heading, 0, lookaheadDistance),
       warningLevel: "low",
       warningColour: "blue",
       startDistanceMetres: 0,
@@ -276,9 +380,12 @@ const buildFallbackSegments = (
   ) {
     const startDistance = Math.max(0, warningDistance);
     const endDistance = Math.min(lookaheadDistance, startDistance + 260);
+    const warningGeometry = routeGeometry
+      ? sliceLineByDistance(routeGeometry, startDistance, Math.min(endDistance, routeDistance))
+      : null;
     segments.push({
       id: `dashboard-${warningLevel}-${Math.round(startDistance / 10) * 10}`,
-      geometry: buildCorridorLine(origin, heading, startDistance, endDistance),
+      geometry: warningGeometry ?? buildCorridorLine(origin, heading, startDistance, endDistance),
       warningLevel,
       warningColour: drivingState.upcomingWarningColour,
       startDistanceMetres: startDistance,
@@ -400,19 +507,30 @@ export function DashboardMapboxMap({
   } | null>(null);
   const traceRef = useRef<TracePoint[]>([]);
   const lastMatchRef = useRef<{ time: number; status: string }>({ time: 0, status: "idle" });
+  const lastRouteRef = useRef<{
+    time: number;
+    latitude: number;
+    longitude: number;
+    heading: number;
+    status: string;
+  } | null>(null);
   const sourceUpdatesRef = useRef(0);
   const warningSegmentsRef = useRef<WarningRoadSegment[]>([]);
   const [status, setStatus] = useState(token ? "loading" : "checking-token");
   const [isMapReady, setIsMapReady] = useState(false);
+  const [routeAheadGeometry, setRouteAheadGeometry] = useState<GeoJSON.LineString | null>(null);
 
   const currentLocation = useMemo(
-    () => getCurrentLocation(location, drivingState),
-    [drivingState, location],
+    () => {
+      const rawLocation = getCurrentLocation(location, drivingState);
+      return rawLocation ? getNearestRoutePoint(routeAheadGeometry, rawLocation) : null;
+    },
+    [drivingState, location, routeAheadGeometry],
   );
 
   const warningSegments = useMemo(
-    () => buildFallbackSegments(currentLocation, drivingState),
-    [currentLocation, drivingState],
+    () => buildFallbackSegments(currentLocation, drivingState, routeAheadGeometry),
+    [currentLocation, drivingState, routeAheadGeometry],
   );
   warningSegmentsRef.current = warningSegments;
 
@@ -605,6 +723,90 @@ export function DashboardMapboxMap({
     source.setData(toFeatureCollection(warningSegments));
     sourceUpdatesRef.current += 1;
   }, [isMapReady, warningSegments]);
+
+  useEffect(() => {
+    if (!token || !currentLocation || !isActive) return;
+
+    const now = Date.now();
+    const lastRoute = lastRouteRef.current;
+    const movedMetres = lastRoute
+      ? getDistanceMetres(
+          lastRoute.latitude,
+          lastRoute.longitude,
+          currentLocation.latitude,
+          currentLocation.longitude,
+        )
+      : Number.POSITIVE_INFINITY;
+    const headingDelta = lastRoute
+      ? Math.abs(getHeadingDelta(lastRoute.heading, currentLocation.heading))
+      : Number.POSITIVE_INFINITY;
+
+    if (
+      lastRoute &&
+      now - lastRoute.time < ROUTE_AHEAD_MIN_INTERVAL_MS &&
+      movedMetres < ROUTE_AHEAD_MIN_MOVE_METRES &&
+      headingDelta < ROUTE_AHEAD_MIN_HEADING_DEGREES
+    ) {
+      return;
+    }
+
+    const speed = drivingState.currentSpeed ?? currentLocation.speedKmh;
+    const lookaheadDistance = speed > 80 ? 1500 : speed > 40 ? 1000 : 650;
+    const destination = getPointAhead(
+      currentLocation.latitude,
+      currentLocation.longitude,
+      currentLocation.heading,
+      lookaheadDistance,
+    );
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${currentLocation.longitude.toFixed(
+      6,
+    )},${currentLocation.latitude.toFixed(6)};${destination.longitude.toFixed(
+      6,
+    )},${destination.latitude.toFixed(
+      6,
+    )}?geometries=geojson&overview=full&steps=false&alternatives=false&access_token=${token}`;
+
+    lastRouteRef.current = {
+      time: now,
+      latitude: currentLocation.latitude,
+      longitude: currentLocation.longitude,
+      heading: currentLocation.heading,
+      status: "checking",
+    };
+
+    const controller = new AbortController();
+    void fetch(url, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Directions failed with ${response.status}`);
+        return response.json() as Promise<{ routes?: Array<{ geometry?: GeoJSON.LineString }> }>;
+      })
+      .then((payload) => {
+        const geometry = payload.routes?.[0]?.geometry;
+        if (geometry?.coordinates.length && geometry.coordinates.length >= 2) {
+          setRouteAheadGeometry(geometry);
+          lastRouteRef.current = {
+            time: now,
+            latitude: currentLocation.latitude,
+            longitude: currentLocation.longitude,
+            heading: currentLocation.heading,
+            status: "ready",
+          };
+        }
+      })
+      .catch((error) => {
+        if ((error as Error).name === "AbortError") return;
+        lastRouteRef.current = {
+          time: now,
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
+          heading: currentLocation.heading,
+          status: "failed",
+        };
+        if (import.meta.env.DEV) setStatus("directions-failed");
+      });
+
+    return () => controller.abort();
+  }, [currentLocation, drivingState.currentSpeed, isActive, token]);
 
   useEffect(() => {
     if (!currentLocation) return;

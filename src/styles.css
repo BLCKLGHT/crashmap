@@ -580,7 +580,6 @@ button:disabled {
   align-content: center;
   justify-items: center;
   overflow: hidden;
-  border-block: 1px solid rgba(255, 255, 255, 0.12);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.11), transparent 44%),
     rgba(255, 255, 255, 0.08);
@@ -2055,8 +2054,7 @@ input[type="range"] {
   }
 
   .dashboard-distance {
-    border-block: 0;
-    border-inline: 1px solid rgba(255, 255, 255, 0.12);
+    border: 0;
   }
 
   .dashboard-distance strong {

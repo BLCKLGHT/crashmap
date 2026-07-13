@@ -94,6 +94,12 @@ const getCarLengths = (speedMetresPerSecond?: number): number => {
 
 const getVisibleCarCount = (carLengths: number): number => Math.min(carLengths, 10);
 
+const getSteppedWarningDistance = (distanceMetres: number, maxDistanceMetres: number): number => {
+  const clampedDistance = Math.max(10, Math.min(maxDistanceMetres, distanceMetres));
+  const step = clampedDistance > 200 ? 100 : clampedDistance > 100 ? 20 : 10;
+  return Math.max(10, Math.ceil(clampedDistance / step) * step);
+};
+
 const getRoadHistoryDistanceParts = (
   lookaheadRisk: DashboardLookaheadRisk | null,
 ): { prefix: string; value: string; unit: string } => {
@@ -109,12 +115,9 @@ const getRoadHistoryDistanceParts = (
     return { prefix: "In next", value: String(lookaheadRisk.lookaheadDistanceMetres), unit: "m" };
   }
 
-  const roundedDistance = Math.max(
-    10,
-    Math.min(
-      lookaheadRisk.lookaheadDistanceMetres,
-      Math.ceil(lookaheadRisk.nearestCrashDistanceMetres / 10) * 10,
-    ),
+  const roundedDistance = getSteppedWarningDistance(
+    lookaheadRisk.nearestCrashDistanceMetres,
+    lookaheadRisk.lookaheadDistanceMetres,
   );
   return { prefix: "In", value: String(roundedDistance), unit: "m" };
 };
