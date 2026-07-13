@@ -4,6 +4,7 @@ import type { DriveLocation } from "../types/crash";
 
 type DashboardMiniMapProps = {
   location: DriveLocation | null;
+  showVehicle?: boolean;
 };
 
 const DEFAULT_CENTRE: L.LatLngExpression = [-42.05, 146.6];
@@ -41,7 +42,7 @@ const getPointAhead = (
   );
 };
 
-export function DashboardMiniMap({ location }: DashboardMiniMapProps) {
+export function DashboardMiniMap({ location, showVehicle = true }: DashboardMiniMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -76,7 +77,7 @@ export function DashboardMiniMap({ location }: DashboardMiniMapProps) {
     const marker = L.marker(initialCentre, {
       interactive: false,
       keyboard: false,
-      opacity: location ? 1 : 0,
+      opacity: location && showVehicle ? 1 : 0,
       icon: L.divIcon({
         className: "dashboard-mini-map__vehicle",
         html: '<span aria-hidden="true"></span>',
@@ -102,7 +103,7 @@ export function DashboardMiniMap({ location }: DashboardMiniMapProps) {
 
     const nextPosition = L.latLng(location.latitude, location.longitude);
     marker.setLatLng(nextPosition);
-    marker.setOpacity(1);
+    marker.setOpacity(showVehicle ? 1 : 0);
     const markerElement = marker.getElement();
     if (markerElement) {
       const heading =
@@ -121,7 +122,7 @@ export function DashboardMiniMap({ location }: DashboardMiniMapProps) {
       noMoveStart: true,
       },
     );
-  }, [location?.heading, location?.latitude, location?.longitude]);
+  }, [location?.heading, location?.latitude, location?.longitude, showVehicle]);
 
   return (
     <div

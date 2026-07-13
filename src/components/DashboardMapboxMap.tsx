@@ -6,6 +6,7 @@ import type {
   DriveLocation,
   WarningRoadSegment,
 } from "../types/crash";
+import { DashboardMiniMap } from "./DashboardMiniMap";
 
 type DashboardMapboxMapProps = {
   location: DriveLocation | null;
@@ -60,12 +61,17 @@ const CORE_LAYER_ID = "dashboard-warning-road-core";
 const MAP_MATCH_MIN_INTERVAL_MS = 4500;
 const MAP_MATCH_MIN_TRACE_POINTS = 4;
 const MAX_TRACE_POINTS = 10;
+const MAP_LOAD_TIMEOUT_MS = 3500;
 
 const getMapboxToken = (): string | undefined => {
   const meta = import.meta as ImportMeta & {
     env?: Record<string, string | undefined>;
   };
-  return meta.env?.VITE_MAPBOX_ACCESS_TOKEN;
+  return (
+    meta.env?.VITE_MAPBOX_ACCESS_TOKEN ||
+    meta.env?.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ||
+    meta.env?.PUBLIC_MAPBOX_ACCESS_TOKEN
+  );
 };
 
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
@@ -315,6 +321,7 @@ export function DashboardMapboxMap({
   const sourceUpdatesRef = useRef(0);
   const warningSegmentsRef = useRef<WarningRoadSegment[]>([]);
   const [status, setStatus] = useState(token ? "loading" : "missing-token");
+  const [isMapReady, setIsMapReady] = useState(false);
 
   const currentLocation = useMemo(
     () => getCurrentLocation(location, drivingState),
@@ -332,140 +339,150 @@ export function DashboardMapboxMap({
 
     let isCancelled = false;
     let createdMap: MapboxMap | null = null;
+    const loadTimeout = window.setTimeout(() => {
+      setStatus((current) => (current === "ready" ? current : "load-timeout"));
+    }, MAP_LOAD_TIMEOUT_MS);
 
-    void import("mapbox-gl").then((module) => {
-      if (isCancelled || !containerRef.current) return;
-      const mapboxgl = module.default;
-      mapboxgl.accessToken = token;
-      const map = new mapboxgl.Map({
-        container: containerRef.current,
-        style: "mapbox://styles/mapbox/navigation-night-v1",
-        center: currentLocation
-          ? [currentLocation.longitude, currentLocation.latitude]
-          : DEFAULT_CENTRE,
-        zoom: currentLocation ? DRIVE_CAMERA_ZOOM : 6.5,
-        pitch: currentLocation ? DRIVE_CAMERA_PITCH : 0,
-        bearing: currentLocation?.heading ?? 0,
-        attributionControl: false,
-        interactive: false,
-        antialias: true,
-      });
-      createdMap = map;
-
-      map.addControl(
-        new mapboxgl.AttributionControl({
-          compact: true,
-          customAttribution: "Mapbox",
-        }),
-      );
-
-      map.on("load", () => {
-        map.addSource(SOURCE_ID, {
-          type: "geojson",
-          data: toFeatureCollection(warningSegmentsRef.current),
-          lineMetrics: true,
+    void import("mapbox-gl")
+      .then((module) => {
+        if (isCancelled || !containerRef.current) return;
+        const mapboxgl = module.default;
+        mapboxgl.accessToken = token;
+        const map = new mapboxgl.Map({
+          container: containerRef.current,
+          style: "mapbox://styles/mapbox/navigation-night-v1",
+          center: currentLocation
+            ? [currentLocation.longitude, currentLocation.latitude]
+            : DEFAULT_CENTRE,
+          zoom: currentLocation ? DRIVE_CAMERA_ZOOM : 6.5,
+          pitch: currentLocation ? DRIVE_CAMERA_PITCH : 0,
+          bearing: currentLocation?.heading ?? 0,
+          attributionControl: false,
+          interactive: false,
+          antialias: true,
         });
-        map.addLayer({
-          id: GLOW_LAYER_ID,
-          type: "line",
-          source: SOURCE_ID,
-          layout: {
-            "line-cap": "round",
-            "line-join": "round",
-          },
-          paint: {
-            "line-color": [
-              "match",
-              ["get", "warningColour"],
-              "red",
-              "#ef4444",
-              "orange",
-              "#f97316",
-              "blue",
-              "#38bdf8",
-              "#38bdf8",
-            ],
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              14,
-              12,
-              18,
-              22,
-            ],
-            "line-opacity": [
-              "interpolate",
-              ["linear"],
-              ["get", "startDistanceMetres"],
-              0,
-              0.46,
-              300,
-              0.36,
-              1000,
-              0.24,
-            ],
-            "line-blur": 2.2,
-          },
-        });
-        map.addLayer({
-          id: CORE_LAYER_ID,
-          type: "line",
-          source: SOURCE_ID,
-          layout: {
-            "line-cap": "round",
-            "line-join": "round",
-          },
-          paint: {
-            "line-color": [
-              "match",
-              ["get", "warningColour"],
-              "red",
-              "#f87171",
-              "orange",
-              "#fb923c",
-              "blue",
-              "#7dd3fc",
-              "#7dd3fc",
-            ],
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              14,
-              5,
-              18,
-              10,
-            ],
-            "line-opacity": [
-              "interpolate",
-              ["linear"],
-              ["get", "startDistanceMetres"],
-              0,
-              0.96,
-              300,
-              0.84,
-              1000,
-              0.68,
-            ],
-          },
-        });
-        setStatus("ready");
-      });
+        createdMap = map;
 
-      map.on("error", (event) => {
-        if (import.meta.env.DEV) {
+        map.addControl(
+          new mapboxgl.AttributionControl({
+            compact: true,
+            customAttribution: "Mapbox",
+          }),
+        );
+
+        map.on("load", () => {
+          window.clearTimeout(loadTimeout);
+          map.addSource(SOURCE_ID, {
+            type: "geojson",
+            data: toFeatureCollection(warningSegmentsRef.current),
+            lineMetrics: true,
+          });
+          map.addLayer({
+            id: GLOW_LAYER_ID,
+            type: "line",
+            source: SOURCE_ID,
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+            paint: {
+              "line-color": [
+                "match",
+                ["get", "warningColour"],
+                "red",
+                "#ef4444",
+                "orange",
+                "#f97316",
+                "blue",
+                "#38bdf8",
+                "#38bdf8",
+              ],
+              "line-width": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                14,
+                12,
+                18,
+                22,
+              ],
+              "line-opacity": [
+                "interpolate",
+                ["linear"],
+                ["get", "startDistanceMetres"],
+                0,
+                0.46,
+                300,
+                0.36,
+                1000,
+                0.24,
+              ],
+              "line-blur": 2.2,
+            },
+          });
+          map.addLayer({
+            id: CORE_LAYER_ID,
+            type: "line",
+            source: SOURCE_ID,
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+            paint: {
+              "line-color": [
+                "match",
+                ["get", "warningColour"],
+                "red",
+                "#f87171",
+                "orange",
+                "#fb923c",
+                "blue",
+                "#7dd3fc",
+                "#7dd3fc",
+              ],
+              "line-width": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                14,
+                5,
+                18,
+                10,
+              ],
+              "line-opacity": [
+                "interpolate",
+                ["linear"],
+                ["get", "startDistanceMetres"],
+                0,
+                0.96,
+                300,
+                0.84,
+                1000,
+                0.68,
+              ],
+            },
+          });
+          setStatus("ready");
+          setIsMapReady(true);
+          window.requestAnimationFrame(() => map.resize());
+        });
+
+        map.on("error", (event) => {
           setStatus(event.error?.message ?? "mapbox-error");
-        }
-      });
+        });
 
-      mapRef.current = map;
-    });
+        mapRef.current = map;
+      })
+      .catch(() => {
+        setStatus("mapbox-load-failed");
+      });
 
     return () => {
+      window.clearTimeout(loadTimeout);
       isCancelled = true;
       createdMap?.remove();
       mapRef.current = null;
+      setIsMapReady(false);
     };
   }, [token]);
 
@@ -629,7 +646,15 @@ export function DashboardMapboxMap({
 
   return (
     <div className="dashboard-mapbox" aria-hidden="true">
-      <div ref={containerRef} className="dashboard-mapbox__canvas" />
+      <div
+        className={`dashboard-mapbox__fallback-map ${isMapReady ? "" : "is-visible"}`}
+      >
+        <DashboardMiniMap location={location} showVehicle={false} />
+      </div>
+      <div
+        ref={containerRef}
+        className={`dashboard-mapbox__canvas ${isMapReady ? "is-ready" : ""}`}
+      />
       <div
         className="dashboard-mapbox__vehicle"
         style={{ "--vehicle-y": `${VEHICLE_SCREEN_Y_RATIO * 100}%` } as CSSProperties}
@@ -642,9 +667,9 @@ export function DashboardMapboxMap({
           style={{ "--vehicle-y": `${VEHICLE_SCREEN_Y_RATIO * 100}%` } as CSSProperties}
         />
       )}
-      {!token && (
+      {status !== "ready" && (
         <div className="dashboard-mapbox__fallback">
-          Mapbox token missing
+          {token ? "Map loading" : "Mapbox token missing"}
         </div>
       )}
       {import.meta.env.DEV && (

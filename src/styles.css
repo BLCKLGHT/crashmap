@@ -711,7 +711,8 @@ button:disabled {
 }
 
 .dashboard-mapbox,
-.dashboard-mapbox__canvas {
+.dashboard-mapbox__canvas,
+.dashboard-mapbox__fallback-map {
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -724,8 +725,39 @@ button:disabled {
 }
 
 .dashboard-mapbox__canvas {
-  opacity: 0.95;
+  opacity: 0;
   filter: saturate(0.78) contrast(0.98) brightness(0.94);
+  transition: opacity 420ms ease-in-out;
+}
+
+.dashboard-mapbox__canvas.is-ready {
+  opacity: 0.95;
+}
+
+.dashboard-mapbox__fallback-map {
+  opacity: 0;
+  transition: opacity 420ms ease-in-out;
+}
+
+.dashboard-mapbox__fallback-map.is-visible {
+  opacity: 0.92;
+}
+
+.dashboard-mapbox__fallback-map .dashboard-mini-map {
+  width: 100%;
+  height: calc(100% + 10rem);
+  background: transparent;
+  transform: translateY(-11rem) perspective(760px) rotateX(43deg) scale(1.78);
+  transform-origin: 50% 100%;
+}
+
+.dashboard-mapbox__fallback-map .leaflet-tile-pane {
+  opacity: 0.9;
+  filter: grayscale(0.88) saturate(0.5) contrast(0.78) brightness(1.12);
+}
+
+.dashboard-mapbox__fallback-map .leaflet-control-attribution {
+  display: none;
 }
 
 .dashboard-mapbox__vehicle,
