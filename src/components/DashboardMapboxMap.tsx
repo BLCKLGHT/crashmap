@@ -62,6 +62,8 @@ const MAP_MATCH_MIN_INTERVAL_MS = 4500;
 const MAP_MATCH_MIN_TRACE_POINTS = 4;
 const MAX_TRACE_POINTS = 10;
 const MAP_LOAD_TIMEOUT_MS = 3500;
+const TERRAIN_SOURCE_ID = "dashboard-mapbox-terrain";
+const BUILDINGS_LAYER_ID = "dashboard-mapbox-buildings";
 
 const getMapboxToken = (): string | undefined => {
   const meta = import.meta as ImportMeta & {
@@ -72,6 +74,16 @@ const getMapboxToken = (): string | undefined => {
     meta.env?.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ||
     meta.env?.PUBLIC_MAPBOX_ACCESS_TOKEN
   );
+};
+
+const fetchRuntimeMapboxToken = async (): Promise<string | null> => {
+  const response = await fetch("/api/mapbox-token", {
+    method: "GET",
+    headers: { accept: "application/json" },
+  });
+  if (!response.ok) return null;
+  const payload = (await response.json()) as { token?: string };
+  return payload.token?.startsWith("pk.") ? payload.token : null;
 };
 
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
@@ -301,12 +313,82 @@ const createEmptyFeatureCollection = (): WarningFeatureCollection => ({
   features: [],
 });
 
+const applyCamera = (map: MapboxMap, smoothed: SmoothedDriveState): void => {
+  const camera = getCameraSettings(smoothed.speedKmh);
+  const centreAhead = getPointAhead(
+    smoothed.latitude,
+    smoothed.longitude,
+    smoothed.heading,
+    camera.aheadMetres,
+  );
+
+  map.stop();
+  map.easeTo({
+    center: [centreAhead.longitude, centreAhead.latitude],
+    bearing: smoothed.heading,
+    pitch: camera.pitch,
+    zoom: camera.zoom,
+    duration: 520,
+    easing: (time) => 1 - (1 - time) ** 3,
+    essential: true,
+  });
+};
+
+const addMapbox3dContext = (map: MapboxMap): void => {
+  try {
+    if (!map.getSource(TERRAIN_SOURCE_ID)) {
+      map.addSource(TERRAIN_SOURCE_ID, {
+        type: "raster-dem",
+        url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+        tileSize: 512,
+        maxzoom: 14,
+      });
+    }
+    map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: 1 });
+  } catch {
+    // Terrain support depends on the loaded style and token permissions.
+  }
+
+  try {
+    if (map.getLayer(BUILDINGS_LAYER_ID)) return;
+    const labelLayer = map
+      .getStyle()
+      .layers?.find(
+        (layer) =>
+          layer.type === "symbol" &&
+          typeof layer.layout?.["text-field"] !== "undefined",
+      )?.id;
+
+    map.addLayer(
+      {
+        id: BUILDINGS_LAYER_ID,
+        source: "composite",
+        "source-layer": "building",
+        filter: ["==", ["get", "extrude"], "true"],
+        type: "fill-extrusion",
+        minzoom: 15,
+        paint: {
+          "fill-extrusion-color": "rgba(148, 163, 184, 0.34)",
+          "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 15, 0, 16, ["get", "height"]],
+          "fill-extrusion-base": ["interpolate", ["linear"], ["zoom"], 15, 0, 16, ["get", "min_height"]],
+          "fill-extrusion-opacity": 0.24,
+        },
+      },
+      labelLayer,
+    );
+  } catch {
+    // Some Mapbox styles do not expose a composite building source.
+  }
+};
+
 export function DashboardMapboxMap({
   location,
   drivingState,
   isActive,
 }: DashboardMapboxMapProps) {
-  const token = getMapboxToken();
+  const buildTimeToken = getMapboxToken();
+  const [runtimeToken, setRuntimeToken] = useState<string | null>(buildTimeToken ?? null);
+  const token = runtimeToken ?? buildTimeToken;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapboxMap | null>(null);
   const smoothedRef = useRef<SmoothedDriveState | null>(null);
@@ -320,7 +402,7 @@ export function DashboardMapboxMap({
   const lastMatchRef = useRef<{ time: number; status: string }>({ time: 0, status: "idle" });
   const sourceUpdatesRef = useRef(0);
   const warningSegmentsRef = useRef<WarningRoadSegment[]>([]);
-  const [status, setStatus] = useState(token ? "loading" : "missing-token");
+  const [status, setStatus] = useState(token ? "loading" : "checking-token");
   const [isMapReady, setIsMapReady] = useState(false);
 
   const currentLocation = useMemo(
@@ -333,6 +415,30 @@ export function DashboardMapboxMap({
     [currentLocation, drivingState],
   );
   warningSegmentsRef.current = warningSegments;
+
+  useEffect(() => {
+    if (buildTimeToken || runtimeToken) return;
+
+    let isCancelled = false;
+    setStatus("checking-token");
+    void fetchRuntimeMapboxToken()
+      .then((nextToken) => {
+        if (isCancelled) return;
+        if (nextToken) {
+          setRuntimeToken(nextToken);
+          setStatus("loading");
+        } else {
+          setStatus("missing-token");
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) setStatus("missing-token");
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [buildTimeToken, runtimeToken]);
 
   useEffect(() => {
     if (!token || !containerRef.current || mapRef.current) return;
@@ -372,6 +478,7 @@ export function DashboardMapboxMap({
 
         map.on("load", () => {
           window.clearTimeout(loadTimeout);
+          addMapbox3dContext(map);
           map.addSource(SOURCE_ID, {
             type: "geojson",
             data: toFeatureCollection(warningSegmentsRef.current),
@@ -464,7 +571,10 @@ export function DashboardMapboxMap({
           });
           setStatus("ready");
           setIsMapReady(true);
-          window.requestAnimationFrame(() => map.resize());
+          window.requestAnimationFrame(() => {
+            map.resize();
+            if (smoothedRef.current) applyCamera(map, smoothedRef.current);
+          });
         });
 
         map.on("error", (event) => {
@@ -488,13 +598,13 @@ export function DashboardMapboxMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map || !isMapReady || !map.isStyleLoaded()) return;
     const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
     if (!source) return;
 
     source.setData(toFeatureCollection(warningSegments));
     sourceUpdatesRef.current += 1;
-  }, [warningSegments]);
+  }, [isMapReady, warningSegments]);
 
   useEffect(() => {
     if (!currentLocation) return;
@@ -539,7 +649,7 @@ export function DashboardMapboxMap({
   useEffect(() => {
     const map = mapRef.current;
     const smoothed = smoothedRef.current;
-    if (!map || !isActive || !smoothed) return;
+    if (!map || !isMapReady || !isActive || !smoothed) return;
 
     const now = Date.now();
     const last = lastCameraRef.current;
@@ -559,24 +669,7 @@ export function DashboardMapboxMap({
       return;
     }
 
-    const camera = getCameraSettings(smoothed.speedKmh);
-    const centreAhead = getPointAhead(
-      smoothed.latitude,
-      smoothed.longitude,
-      smoothed.heading,
-      camera.aheadMetres,
-    );
-
-    map.stop();
-    map.easeTo({
-      center: [centreAhead.longitude, centreAhead.latitude],
-      bearing: smoothed.heading,
-      pitch: camera.pitch,
-      zoom: camera.zoom,
-      duration: 520,
-      easing: (time) => 1 - (1 - time) ** 3,
-      essential: true,
-    });
+    applyCamera(map, smoothed);
 
     lastCameraRef.current = {
       latitude: smoothed.latitude,
@@ -584,7 +677,7 @@ export function DashboardMapboxMap({
       heading: smoothed.heading,
       time: now,
     };
-  }, [currentLocation, isActive]);
+  }, [currentLocation, isActive, isMapReady]);
 
   useEffect(() => {
     if (!token || !currentLocation || !isActive) return;

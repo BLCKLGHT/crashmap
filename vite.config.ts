@@ -162,6 +162,45 @@ export default defineConfig({
     {
       name: "driving-companion-api",
       configureServer(server) {
+        server.middlewares.use("/api/mapbox-token", (request, response) => {
+          if (request.method !== "GET") {
+            response.statusCode = 405;
+            response.setHeader("content-type", "application/json");
+            response.end(JSON.stringify({ error: "Method not allowed" }));
+            return;
+          }
+
+          const token = (
+            process.env.VITE_MAPBOX_ACCESS_TOKEN ||
+            process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ||
+            process.env.PUBLIC_MAPBOX_ACCESS_TOKEN ||
+            process.env.MAPBOX_ACCESS_TOKEN ||
+            ""
+          ).trim();
+
+          if (!token) {
+            response.statusCode = 404;
+            response.setHeader("content-type", "application/json");
+            response.end(JSON.stringify({ error: "Mapbox token is not configured." }));
+            return;
+          }
+
+          if (!token.startsWith("pk.")) {
+            response.statusCode = 400;
+            response.setHeader("content-type", "application/json");
+            response.end(
+              JSON.stringify({
+                error: "Configured Mapbox token must be a public token beginning with pk.",
+              }),
+            );
+            return;
+          }
+
+          response.statusCode = 200;
+          response.setHeader("content-type", "application/json");
+          response.end(JSON.stringify({ token }));
+        });
+
         server.middlewares.use("/api/driving-companion", async (request, response) => {
           if (request.method !== "POST") {
             response.statusCode = 405;
