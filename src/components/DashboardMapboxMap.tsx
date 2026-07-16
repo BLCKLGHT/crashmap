@@ -7,7 +7,6 @@ import type {
   DriveLocation,
   WarningRoadSegment,
 } from "../types/crash";
-import { DashboardMiniMap } from "./DashboardMiniMap";
 
 type DashboardMapboxMapProps = {
   location: DriveLocation | null;
@@ -1053,11 +1052,6 @@ export function DashboardMapboxMap({
 
   return (
     <div className="dashboard-mapbox" aria-hidden="true">
-      <div
-        className={`dashboard-mapbox__fallback-map ${isMapReady ? "" : "is-visible"}`}
-      >
-        <DashboardMiniMap location={location} showVehicle={false} />
-      </div>
       <div
         ref={containerRef}
         className={`dashboard-mapbox__canvas ${isMapReady ? "is-ready" : ""}`}

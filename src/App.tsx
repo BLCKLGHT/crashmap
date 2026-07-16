@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { CrashMap } from "./components/CrashMap";
 import { DashboardMode } from "./components/DashboardMode";
@@ -350,15 +349,6 @@ const getSimulatedDrivingConditions = (
     lightCondition: mode === "dark" ? "dark" : "daylight",
     weatherLabel: mode === "dark" ? "simulated night conditions" : "simulated daylight",
   };
-};
-
-const getFatalProximityIntensity = (closestFatalMetres?: number): number => {
-  if (typeof closestFatalMetres !== "number" || !Number.isFinite(closestFatalMetres)) {
-    return 0;
-  }
-
-  if (closestFatalMetres > 500) return 0;
-  return Math.max(0.35, Math.min(1, 1 - closestFatalMetres / 500));
 };
 
 function App() {
@@ -1284,10 +1274,6 @@ function App() {
     displayedDriveLocation?.speed,
     currentSpeedZoneLabel,
   );
-  const fatalProximityIntensity = getFatalProximityIntensity(driveRisk?.closestFatalMetres);
-  const fatalProximityStyle = {
-    "--fatal-glow-strength": fatalProximityIntensity.toFixed(3),
-  } as CSSProperties;
   const weatherMatchStatus =
     filters.weatherMode === "off"
       ? "off"
@@ -1503,17 +1489,6 @@ function App() {
         />
       )}
 
-      <header className="top-bar app-chrome">
-        <div>
-          <p className="eyebrow">Public awareness map</p>
-          <h1>Tasmania Crash Map</h1>
-        </div>
-        <p>
-          Historical Tasmanian crash data. Use for awareness and planning, not real-time
-          navigation.
-        </p>
-      </header>
-
       {viewMode === "map" && (
         <FilterPanel
           crashes={dataState.crashes}
@@ -1594,14 +1569,6 @@ function App() {
             </strong>
           </div>
         </div>
-      )}
-
-      {viewMode === "map" && isDriveModeActive && fatalProximityIntensity > 0 && (
-        <div
-          className="fatal-proximity-glow"
-          style={fatalProximityStyle}
-          aria-hidden="true"
-        />
       )}
 
       <button
