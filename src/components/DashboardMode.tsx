@@ -20,6 +20,7 @@ import type {
   WeatherState,
 } from "../types/crash";
 import { DashboardMapboxMap } from "./DashboardMapboxMap";
+import vehicleTopImageUrl from "../assets/vehicle-top.png";
 
 type DashboardModeProps = {
   isActive: boolean;
@@ -306,6 +307,9 @@ export function DashboardMode({
             nearbyCrashes={driveRisk?.nearbyCrashes ?? []}
             onSpeedLimitChange={onMapboxSpeedLimitChange}
           />
+        </div>
+        <div className="dashboard-car-overlay" aria-hidden="true">
+          <img src={vehicleTopImageUrl} alt="" draggable="false" />
         </div>
         <div className="dashboard-history__conditions dashboard-history__conditions--persistent" aria-label="Current driving conditions">
           {conditionIndicators}

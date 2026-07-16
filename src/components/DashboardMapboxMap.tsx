@@ -8,7 +8,6 @@ import type {
   WarningRoadSegment,
 } from "../types/crash";
 import { fetchRuntimeMapboxToken, getMapboxToken } from "../data/mapboxToken";
-import vehicleTopImageUrl from "../assets/vehicle-top.png";
 
 type DashboardMapboxMapProps = {
   location: DriveLocation | null;
@@ -1037,12 +1036,6 @@ export function DashboardMapboxMap({
         ref={containerRef}
         className={`dashboard-mapbox__canvas ${isMapReady ? "is-ready" : ""}`}
       />
-      <div
-        className="dashboard-car-overlay"
-        style={{ "--vehicle-y": `${VEHICLE_SCREEN_Y_RATIO * 100}%` } as CSSProperties}
-      >
-        <img src={vehicleTopImageUrl} alt="" draggable="false" />
-      </div>
       {location?.accuracy && location.accuracy > 45 && (
         <div
           className="dashboard-mapbox__accuracy"
