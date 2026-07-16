@@ -514,6 +514,26 @@ const addMapbox3dContext = (map: MapboxMap): void => {
   }
 };
 
+const hideDashboardStyleIcons = (map: MapboxMap): void => {
+  const layers = map.getStyle().layers ?? [];
+
+  for (const layer of layers) {
+    if (layer.type !== "symbol") continue;
+    const layout = layer.layout ?? {};
+    const hasIcon = typeof layout["icon-image"] !== "undefined";
+    const hasText = typeof layout["text-field"] !== "undefined";
+    const isIncidentLike = /incident|closure|construction|alert|hazard|restriction|turn|arrow/i.test(layer.id);
+
+    if ((hasIcon && !hasText) || isIncidentLike) {
+      try {
+        map.setLayoutProperty(layer.id, "visibility", "none");
+      } catch {
+        // Some style layers are not mutable during initial style setup.
+      }
+    }
+  }
+};
+
 export function DashboardMapboxMap({
   location,
   drivingState,
@@ -627,6 +647,7 @@ export function DashboardMapboxMap({
         map.on("load", () => {
           window.clearTimeout(loadTimeout);
           addMapbox3dContext(map);
+          hideDashboardStyleIcons(map);
           map.addSource(SOURCE_ID, {
             type: "geojson",
             data: toFeatureCollection(warningSegmentsRef.current),
