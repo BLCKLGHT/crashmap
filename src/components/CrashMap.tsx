@@ -8,6 +8,7 @@ import type {
 } from "../types/crash";
 import { getCrashConditionMatch } from "../data/conditionMatching";
 import { isFatalCrash, isSeriousCrash } from "../data/filterCrashes";
+import { fetchRuntimeMapboxToken, getMapboxToken } from "../data/mapboxToken";
 import vehicleTopImageUrl from "../assets/vehicle-top.png";
 
 type CrashMapProps = {
@@ -62,27 +63,6 @@ const TASMANIA_CENTRE: [number, number] = [146.6, -42.05];
 const CLUSTER_MAX_ZOOM = 12;
 const POINT_MIN_ZOOM = 12.5;
 const DRIVE_ZOOM = 15.5;
-
-const getMapboxToken = (): string | undefined => {
-  const meta = import.meta as ImportMeta & {
-    env?: Record<string, string | undefined>;
-  };
-  return (
-    meta.env?.VITE_MAPBOX_ACCESS_TOKEN ||
-    meta.env?.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ||
-    meta.env?.PUBLIC_MAPBOX_ACCESS_TOKEN
-  );
-};
-
-const fetchRuntimeMapboxToken = async (): Promise<string | null> => {
-  const response = await fetch("/api/mapbox-token", {
-    method: "GET",
-    headers: { accept: "application/json" },
-  });
-  if (!response.ok) return null;
-  const payload = (await response.json()) as { token?: string };
-  return payload.token?.startsWith("pk.") ? payload.token : null;
-};
 
 const getStyleForPhase = (phase: CrashMapProps["timePhase"]): string =>
   phase === "night" || phase === "dusk"

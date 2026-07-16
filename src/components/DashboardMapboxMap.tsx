@@ -7,6 +7,7 @@ import type {
   DriveLocation,
   WarningRoadSegment,
 } from "../types/crash";
+import { fetchRuntimeMapboxToken, getMapboxToken } from "../data/mapboxToken";
 import vehicleTopImageUrl from "../assets/vehicle-top.png";
 
 type DashboardMapboxMapProps = {
@@ -79,27 +80,6 @@ const BUILDINGS_LAYER_ID = "dashboard-mapbox-buildings";
 const ROUTE_AHEAD_MIN_INTERVAL_MS = 3500;
 const ROUTE_AHEAD_MIN_MOVE_METRES = 18;
 const ROUTE_AHEAD_MIN_HEADING_DEGREES = 8;
-
-const getMapboxToken = (): string | undefined => {
-  const meta = import.meta as ImportMeta & {
-    env?: Record<string, string | undefined>;
-  };
-  return (
-    meta.env?.VITE_MAPBOX_ACCESS_TOKEN ||
-    meta.env?.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ||
-    meta.env?.PUBLIC_MAPBOX_ACCESS_TOKEN
-  );
-};
-
-const fetchRuntimeMapboxToken = async (): Promise<string | null> => {
-  const response = await fetch("/api/mapbox-token", {
-    method: "GET",
-    headers: { accept: "application/json" },
-  });
-  if (!response.ok) return null;
-  const payload = (await response.json()) as { token?: string };
-  return payload.token?.startsWith("pk.") ? payload.token : null;
-};
 
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 const toDegrees = (radians: number): number => (radians * 180) / Math.PI;
