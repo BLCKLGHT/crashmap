@@ -6,6 +6,7 @@ import { ErrorState } from "./components/ErrorState";
 import { FilterPanel } from "./components/FilterPanel";
 import { LoadingState } from "./components/LoadingState";
 import { VoiceSettings } from "./components/VoiceSettings";
+import vehicleTopImageUrl from "./assets/vehicle-top.png";
 import {
   clearCachedCrashData,
   fetchAllTasCrashData,
@@ -1471,6 +1472,40 @@ function App() {
           Dashboard Mode
         </button>
       </div>
+
+      {viewMode === "dashboard" && (
+        <div
+          className="dashboard-root-car-overlay"
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            top: "86vh",
+            left: "50%",
+            zIndex: 2147483647,
+            width: "6.6rem",
+            height: "8.8rem",
+            pointerEvents: "none",
+            transform: "translate(-50%, -50%)",
+            display: "grid",
+            placeItems: "center",
+            filter: "drop-shadow(0 1.2rem 1.8rem rgba(0, 0, 0, 0.42))",
+            opacity: 1,
+          }}
+        >
+          <img
+            src={vehicleTopImageUrl}
+            alt=""
+            draggable="false"
+            style={{
+              display: "block",
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              objectPosition: "center",
+            }}
+          />
+        </div>
+      )}
 
       {isDriveModeActive && (
         <VoiceSettings
