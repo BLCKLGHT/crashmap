@@ -735,25 +735,22 @@ button:disabled {
   opacity: 0.95;
 }
 
-.dashboard-car-overlay,
-.dashboard-mapbox__accuracy {
-  position: absolute;
-  left: 50%;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
 .dashboard-car-overlay {
-  top: 68% !important;
-  left: 50% !important;
-  z-index: 5000 !important;
+  position: fixed !important;
+  top: min(82dvh, calc(100dvh - 6.7rem)) !important;
+  left: 50vw !important;
+  z-index: 2147483647 !important;
   display: grid;
-  width: clamp(4.8rem, 18vw, 7rem);
-  height: clamp(6.2rem, 24vw, 9.2rem);
+  width: clamp(4.4rem, 17vw, 6.4rem);
+  height: clamp(6.1rem, 23vw, 8.8rem);
   place-items: center;
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 55%, rgba(255, 255, 255, 0.2), transparent 62%);
   filter:
     drop-shadow(0 0 3px rgba(255, 255, 255, 0.88))
     drop-shadow(0 12px 22px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+  transform: translate(-50%, -50%) !important;
 }
 
 .dashboard-car-overlay img {
@@ -766,13 +763,17 @@ button:disabled {
 }
 
 .dashboard-mapbox__accuracy {
+  position: absolute;
   top: var(--vehicle-y, 74%);
+  left: 50%;
   z-index: 7;
   width: 5.2rem;
   height: 5.2rem;
   border: 1px solid rgba(125, 211, 252, 0.34);
   border-radius: 999px;
   background: rgba(56, 189, 248, 0.12);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 .dashboard-mapbox__fallback,
