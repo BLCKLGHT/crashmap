@@ -177,12 +177,6 @@ button:disabled {
   user-select: none;
 }
 
-.mapbox-vehicle-marker--dashboard {
-  width: clamp(3.7rem, 15vw, 5.8rem);
-  height: clamp(3.7rem, 15vw, 5.8rem);
-  pointer-events: none;
-}
-
 .map-updating {
   position: absolute;
   right: 14px;
@@ -741,6 +735,7 @@ button:disabled {
   opacity: 0.95;
 }
 
+.dashboard-car-overlay,
 .dashboard-mapbox__accuracy {
   position: absolute;
   top: var(--vehicle-y, 74%);
@@ -748,6 +743,26 @@ button:disabled {
   z-index: 8;
   pointer-events: none;
   transform: translate(-50%, -50%);
+}
+
+.dashboard-car-overlay {
+  z-index: 9;
+  display: grid;
+  width: clamp(4.7rem, 18vw, 7rem);
+  height: clamp(4.7rem, 18vw, 7rem);
+  place-items: center;
+  filter:
+    drop-shadow(0 0 3px rgba(255, 255, 255, 0.88))
+    drop-shadow(0 12px 22px rgba(0, 0, 0, 0.5));
+}
+
+.dashboard-car-overlay img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  user-select: none;
 }
 
 .dashboard-mapbox__accuracy {

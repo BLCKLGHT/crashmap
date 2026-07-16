@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import type { GeoJSONSource, Map as MapboxMap, Marker } from "mapbox-gl";
+import type { GeoJSONSource, Map as MapboxMap } from "mapbox-gl";
 import type {
   CrashRecord,
   DashboardDrivingState,
@@ -527,7 +527,6 @@ export function DashboardMapboxMap({
   const token = runtimeToken ?? buildTimeToken;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapboxMap | null>(null);
-  const markerRef = useRef<Marker | null>(null);
   const smoothedRef = useRef<SmoothedDriveState | null>(null);
   const lastCameraRef = useRef<{
     latitude: number;
@@ -762,27 +761,6 @@ export function DashboardMapboxMap({
               "circle-opacity": 0.96,
             },
           });
-          const vehicleElement = document.createElement("div");
-          vehicleElement.className = "mapbox-vehicle-marker mapbox-vehicle-marker--dashboard";
-          vehicleElement.setAttribute("aria-hidden", "true");
-          vehicleElement.innerHTML = `<img src="${vehicleTopImageUrl}" alt="" draggable="false" />`;
-          const marker = new mapboxgl.Marker({
-            element: vehicleElement,
-            anchor: "center",
-            rotationAlignment: "map",
-            pitchAlignment: "map",
-          });
-          const markerLocation = smoothedRef.current ?? currentLocation;
-          marker
-            .setLngLat(
-              markerLocation
-                ? [markerLocation.longitude, markerLocation.latitude]
-                : DEFAULT_CENTRE,
-            )
-            .setRotation(markerLocation?.heading ?? 0)
-            .addTo(map);
-          marker.getElement().style.display = markerLocation ? "" : "none";
-          markerRef.current = marker;
           setStatus("ready");
           setIsMapReady(true);
           window.requestAnimationFrame(() => {
@@ -804,8 +782,6 @@ export function DashboardMapboxMap({
     return () => {
       window.clearTimeout(loadTimeout);
       isCancelled = true;
-      markerRef.current?.remove();
-      markerRef.current = null;
       createdMap?.remove();
       mapRef.current = null;
       setIsMapReady(false);
@@ -965,17 +941,6 @@ export function DashboardMapboxMap({
   }, [currentLocation]);
 
   useEffect(() => {
-    const marker = markerRef.current;
-    const smoothed = smoothedRef.current;
-    if (!marker) return;
-    marker.getElement().style.display = smoothed ? "" : "none";
-    if (!smoothed) return;
-    marker
-      .setLngLat([smoothed.longitude, smoothed.latitude])
-      .setRotation(smoothed.heading);
-  }, [currentLocation]);
-
-  useEffect(() => {
     const map = mapRef.current;
     const smoothed = smoothedRef.current;
     if (!map || !isMapReady || !isActive || !smoothed) return;
@@ -1072,6 +1037,12 @@ export function DashboardMapboxMap({
         ref={containerRef}
         className={`dashboard-mapbox__canvas ${isMapReady ? "is-ready" : ""}`}
       />
+      <div
+        className="dashboard-car-overlay"
+        style={{ "--vehicle-y": `${VEHICLE_SCREEN_Y_RATIO * 100}%` } as CSSProperties}
+      >
+        <img src={vehicleTopImageUrl} alt="" draggable="false" />
+      </div>
       {location?.accuracy && location.accuracy > 45 && (
         <div
           className="dashboard-mapbox__accuracy"
