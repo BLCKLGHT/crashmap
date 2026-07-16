@@ -20,7 +20,7 @@ import type {
   WeatherState,
 } from "../types/crash";
 import { DashboardMapboxMap } from "./DashboardMapboxMap";
-import vehicleTopImageUrl from "../assets/vehicle-top.png";
+import vehicleTopImageUrl from "../assets/vehicle-top-transparent.png";
 
 type DashboardModeProps = {
   isActive: boolean;

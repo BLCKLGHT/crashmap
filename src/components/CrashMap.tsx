@@ -9,7 +9,7 @@ import type {
 import { getCrashConditionMatch } from "../data/conditionMatching";
 import { isFatalCrash, isSeriousCrash } from "../data/filterCrashes";
 import { fetchRuntimeMapboxToken, getMapboxToken } from "../data/mapboxToken";
-import vehicleTopImageUrl from "../assets/vehicle-top.png";
+import vehicleTopImageUrl from "../assets/vehicle-top-transparent.png";
 
 type CrashMapProps = {
   crashes: CrashRecord[];
