@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { GeoJSONSource, Map as MapboxMap, MapMouseEvent, Popup } from "mapbox-gl";
+import type { GeoJSONSource, Map as MapboxMap, MapMouseEvent, Marker, Popup } from "mapbox-gl";
 import type {
   CrashRecord,
   CurrentDrivingConditions,
@@ -8,6 +8,7 @@ import type {
 } from "../types/crash";
 import { getCrashConditionMatch } from "../data/conditionMatching";
 import { isFatalCrash, isSeriousCrash } from "../data/filterCrashes";
+import vehicleTopImageUrl from "../assets/vehicle-top.png";
 
 type CrashMapProps = {
   crashes: CrashRecord[];
@@ -53,7 +54,6 @@ const CLUSTER_COUNT_LAYER_ID = "mapbox-crash-cluster-count";
 const CRASH_GLOW_LAYER_ID = "mapbox-crash-glow";
 const CRASH_DOT_LAYER_ID = "mapbox-crash-dots";
 const VEHICLE_ACCURACY_LAYER_ID = "mapbox-drive-accuracy";
-const VEHICLE_LAYER_ID = "mapbox-drive-marker";
 const TASMANIA_BOUNDS: [[number, number], [number, number]] = [
   [144.35, -43.85],
   [148.65, -39.55],
@@ -218,8 +218,8 @@ export function CrashMap({
   const token = runtimeToken ?? buildTimeToken;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapboxMap | null>(null);
+  const markerRef = useRef<Marker | null>(null);
   const popupRef = useRef<Popup | null>(null);
-  const isDraggingSimulationRef = useRef(false);
   const driveLocationRef = useRef<DriveLocation | null>(null);
   const simulationRef = useRef<CrashMapProps["driveMode"]>(driveMode);
   const crashFeatureCollectionRef =
@@ -499,23 +499,42 @@ export function CrashMap({
             },
           });
 
-          map.addLayer({
-            id: VEHICLE_LAYER_ID,
-            type: "symbol",
-            source: VEHICLE_SOURCE_ID,
-            layout: {
-              "icon-image": "triangle-15",
-              "icon-size": 1.35,
-              "icon-allow-overlap": true,
-              "icon-rotate": ["get", "heading"],
-              "icon-rotation-alignment": "map",
-            },
-            paint: {
-              "icon-color": "#2563eb",
-              "icon-halo-color": "#ffffff",
-              "icon-halo-width": 2,
-            },
+          const vehicleElement = document.createElement("button");
+          vehicleElement.type = "button";
+          vehicleElement.className = "mapbox-vehicle-marker";
+          vehicleElement.setAttribute("aria-label", "Current vehicle position");
+          vehicleElement.innerHTML = `<img src="${vehicleTopImageUrl}" alt="" draggable="false" />`;
+
+          const marker = new mapboxgl.Marker({
+            element: vehicleElement,
+            anchor: "center",
+            rotationAlignment: "map",
+            pitchAlignment: "map",
+            draggable: Boolean(simulationRef.current?.isSimulation),
           });
+          marker
+            .setLngLat(
+              driveLocationRef.current
+                ? [driveLocationRef.current.longitude, driveLocationRef.current.latitude]
+                : TASMANIA_CENTRE,
+            )
+            .setRotation(driveLocationRef.current?.heading ?? 0)
+            .addTo(map);
+          marker.getElement().style.display = driveLocationRef.current ? "" : "none";
+          marker.on("drag", () => {
+            const simulation = simulationRef.current;
+            if (!simulation?.isSimulation) return;
+            const lngLat = marker.getLngLat();
+            simulation.onSimulatedLocationChange({
+              latitude: lngLat.lat,
+              longitude: lngLat.lng,
+              heading: simulation.location?.heading ?? 0,
+              headingSource: "simulated",
+              speed: 0,
+              isSimulated: true,
+            });
+          });
+          markerRef.current = marker;
 
           map.fitBounds(TASMANIA_BOUNDS, {
             padding: { top: 72, right: 34, bottom: 150, left: 34 },
@@ -586,31 +605,6 @@ export function CrashMap({
           });
         });
 
-        map.on("mousedown", VEHICLE_LAYER_ID, () => {
-          if (!simulationRef.current?.isSimulation) return;
-          isDraggingSimulationRef.current = true;
-          map.dragPan.disable();
-          map.getCanvas().style.cursor = "grabbing";
-        });
-        map.on("mousemove", (event) => {
-          const simulation = simulationRef.current;
-          if (!isDraggingSimulationRef.current || !simulation?.isSimulation) return;
-          simulation.onSimulatedLocationChange({
-            latitude: event.lngLat.lat,
-            longitude: event.lngLat.lng,
-            heading: simulation.location?.heading ?? 0,
-            headingSource: "simulated",
-            speed: 0,
-            isSimulated: true,
-          });
-        });
-        map.on("mouseup", () => {
-          if (!isDraggingSimulationRef.current) return;
-          isDraggingSimulationRef.current = false;
-          map.dragPan.enable();
-          map.getCanvas().style.cursor = "";
-        });
-
         map.on("error", (event) => {
           setStatus(event.error?.message ?? "mapbox-error");
         });
@@ -622,6 +616,8 @@ export function CrashMap({
     return () => {
       isCancelled = true;
       popupRef.current?.remove();
+      markerRef.current?.remove();
+      markerRef.current = null;
       createdMap?.remove();
       mapRef.current = null;
       setIsMapReady(false);
@@ -640,6 +636,17 @@ export function CrashMap({
     if (!map || !isMapReady || !map.isStyleLoaded()) return;
     const source = map.getSource(VEHICLE_SOURCE_ID) as GeoJSONSource | undefined;
     source?.setData(vehicleFeatureCollection);
+
+    const marker = markerRef.current;
+    const location = driveMode?.location;
+    if (!marker) return;
+    marker.getElement().style.display = location ? "" : "none";
+    marker.setDraggable(Boolean(driveMode?.isSimulation));
+    if (location) {
+      marker
+        .setLngLat([location.longitude, location.latitude])
+        .setRotation(location.heading ?? 0);
+    }
   }, [isMapReady, vehicleFeatureCollection]);
 
   useEffect(() => {
