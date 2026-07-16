@@ -737,12 +737,12 @@ button:disabled {
 
 .dashboard-car-overlay {
   position: fixed !important;
-  top: min(82dvh, calc(100dvh - 6.7rem)) !important;
-  left: 50vw !important;
+  top: 76vh !important;
+  left: 50% !important;
   z-index: 2147483647 !important;
   display: grid;
-  width: clamp(4.4rem, 17vw, 6.4rem);
-  height: clamp(6.1rem, 23vw, 8.8rem);
+  width: 5.8rem;
+  height: 8rem;
   place-items: center;
   border-radius: 999px;
   background: radial-gradient(circle at 50% 55%, rgba(255, 255, 255, 0.2), transparent 62%);
@@ -751,6 +751,12 @@ button:disabled {
     drop-shadow(0 12px 22px rgba(0, 0, 0, 0.5));
   pointer-events: none;
   transform: translate(-50%, -50%) !important;
+}
+
+@supports (height: 100dvh) {
+  .dashboard-car-overlay {
+    top: 76dvh !important;
+  }
 }
 
 .dashboard-car-overlay img {
@@ -1929,6 +1935,13 @@ input[type="range"] {
   .dashboard-mode {
     grid-template-rows: 1fr;
     grid-template-columns: 35vw 29vw 1fr;
+  }
+
+  .dashboard-car-overlay {
+    top: 72vh !important;
+    left: 82vw !important;
+    width: 4.5rem;
+    height: 6.2rem;
   }
 
   .dashboard-mode__controls {
