@@ -3,6 +3,7 @@ import { CrashMap } from "./components/CrashMap";
 import { ErrorState } from "./components/ErrorState";
 import { FilterPanel } from "./components/FilterPanel";
 import { LoadingState } from "./components/LoadingState";
+import { PublicAnalytics } from "./components/PublicAnalytics";
 import { fetchAllTasCrashData } from "./data/crashData";
 import { defaultFilters, filterCrashes } from "./data/filterCrashes";
 import type { CrashDataState, CrashFilters, CrashRecord, TimelineState } from "./types/crash";
@@ -52,12 +53,15 @@ const getTimePhase = (time?: number): "day" | "dawn" | "dusk" | "night" => {
   return "day";
 };
 
+type PublicViewerMode = "map" | "analytics";
+
 export function PublicMapViewer() {
   const [dataState, setDataState] = useState<CrashDataState>({ crashes: [] });
   const [filters, setFilters] = useState<CrashFilters>({ ...defaultFilters });
   const [timeline, setTimeline] = useState<TimelineState | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isTimeOfDayEnabled, setIsTimeOfDayEnabled] = useState(true);
+  const [viewerMode, setViewerMode] = useState<PublicViewerMode>("map");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadedCount, setLoadedCount] = useState(0);
@@ -181,6 +185,15 @@ export function PublicMapViewer() {
     });
   }, [attributeFilteredCrashes, timeline]);
 
+  const analyticsCrashes = useMemo(() => {
+    if (!timeline) return attributeFilteredCrashes;
+
+    return attributeFilteredCrashes.filter((crash) => {
+      const time = getCrashTime(crash);
+      return time !== null && time >= timeline.startTime && time <= timeline.endTime;
+    });
+  }, [attributeFilteredCrashes, timeline]);
+
   const displayTime = useMemo(() => {
     if (!timeline?.isPlaybackView || !filteredCrashes.length) return timeline?.playheadTime;
 
@@ -197,20 +210,49 @@ export function PublicMapViewer() {
 
   return (
     <main className="app public-viewer">
-      <CrashMap
-        crashes={filteredCrashes}
-        heatmapCrashes={filteredCrashes}
-        currentConditions={null}
-        weatherMode="off"
-        weatherMatchedCrashIds={[]}
-        timePhase={timePhase}
-      />
+      {viewerMode === "map" ? (
+        <CrashMap
+          crashes={filteredCrashes}
+          heatmapCrashes={filteredCrashes}
+          currentConditions={null}
+          weatherMode="off"
+          weatherMatchedCrashIds={[]}
+          timePhase={timePhase}
+        />
+      ) : (
+        <PublicAnalytics crashes={analyticsCrashes} totalCrashes={dataState.crashes.length} />
+      )}
 
       <header className="public-viewer__header app-chrome">
         <p className="eyebrow">Tasmania Crash Map</p>
-        <h1>Historical crash data viewer</h1>
-        <p>Explore Tasmanian crash records by location, severity, road condition and time.</p>
+        <h1>{viewerMode === "map" ? "Historical crash data viewer" : "Crash data analytics"}</h1>
+        <p>
+          {viewerMode === "map"
+            ? "Explore Tasmanian crash records by location, severity, road condition and time."
+            : "Charts and summaries to help make historical road patterns easier to understand."}
+        </p>
       </header>
+
+      <div className="public-viewer__mode-toggle app-chrome" role="tablist" aria-label="Viewer mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewerMode === "map"}
+          className={viewerMode === "map" ? "is-active" : ""}
+          onClick={() => setViewerMode("map")}
+        >
+          Map
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewerMode === "analytics"}
+          className={viewerMode === "analytics" ? "is-active" : ""}
+          onClick={() => setViewerMode("analytics")}
+        >
+          Analytics
+        </button>
+      </div>
 
       <FilterPanel
         crashes={dataState.crashes}
@@ -236,7 +278,7 @@ export function PublicMapViewer() {
         onClose={() => setIsFilterOpen(false)}
       />
 
-      {timeline && (
+      {viewerMode === "map" && timeline && (
         <div className={`timeline-counter timeline-counter--${timePhase}`} aria-live="polite">
           <span>{timeline.isPlaybackView ? "Timeline frame" : "Selected range"}</span>
           <strong>

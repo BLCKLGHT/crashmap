@@ -158,6 +158,245 @@ button:disabled {
   line-height: 1.25;
 }
 
+.public-viewer__mode-toggle {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  right: 14px;
+  z-index: 432;
+  display: inline-flex;
+  gap: 0.18rem;
+  border: 1px solid rgba(20, 34, 28, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 251, 0.92);
+  box-shadow: 0 8px 24px rgba(18, 27, 23, 0.14);
+  padding: 0.25rem;
+}
+
+.public-viewer__mode-toggle button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+  padding: 0.48rem 0.72rem;
+}
+
+.public-viewer__mode-toggle button.is-active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.public-analytics {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(15, 118, 110, 0.13), transparent 17rem),
+    linear-gradient(180deg, #f7faf6 0%, #e8eee9 100%);
+  color: var(--ink);
+  padding: calc(max(9.5rem, env(safe-area-inset-top) + 8.2rem)) 1rem 7rem;
+}
+
+.public-analytics__intro {
+  width: min(72rem, 100%);
+  margin: 0 auto 1rem;
+}
+
+.public-analytics__intro h1 {
+  margin: 0.08rem 0 0;
+  font-size: clamp(2rem, 8vw, 4.4rem);
+  line-height: 0.95;
+  letter-spacing: 0;
+}
+
+.public-analytics__intro p:last-child {
+  max-width: 46rem;
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: clamp(0.95rem, 2.3vw, 1.1rem);
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.analytics-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  width: min(72rem, 100%);
+  margin: 0 auto 0.85rem;
+}
+
+.analytics-metrics article,
+.analytics-panel {
+  border: 1px solid rgba(20, 34, 28, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 251, 0.82);
+  box-shadow: 0 14px 34px rgba(18, 27, 23, 0.09);
+}
+
+.analytics-metrics article {
+  display: grid;
+  gap: 0.1rem;
+  min-height: 7.6rem;
+  padding: 0.9rem;
+}
+
+.analytics-metrics span,
+.analytics-metrics em {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-style: normal;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.analytics-metrics strong {
+  font-size: clamp(2rem, 6vw, 3.45rem);
+  line-height: 0.95;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  width: min(72rem, 100%);
+  margin: 0 auto;
+}
+
+.analytics-panel {
+  display: grid;
+  gap: 0.75rem;
+  min-height: 20rem;
+  padding: 1rem;
+}
+
+.analytics-panel--wide {
+  grid-column: 1 / -1;
+}
+
+.analytics-panel h2 {
+  margin: 0.12rem 0 0;
+  font-size: clamp(1.2rem, 3.2vw, 1.95rem);
+  line-height: 1.02;
+}
+
+.analytics-panel p {
+  margin: 0.42rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 750;
+  line-height: 1.38;
+}
+
+.analytics-line {
+  width: 100%;
+  min-height: 13rem;
+}
+
+.analytics-line path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5;
+}
+
+.analytics-line circle {
+  fill: #fffffb;
+  stroke: var(--accent-strong);
+  stroke-width: 3;
+}
+
+.analytics-bars {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.18rem;
+  min-height: 13rem;
+  border-bottom: 1px solid rgba(20, 34, 28, 0.16);
+  padding-top: 0.5rem;
+}
+
+.analytics-bars__item {
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  align-items: end;
+  min-width: 0;
+  height: 100%;
+  text-align: center;
+}
+
+.analytics-bars__item i {
+  display: block;
+  width: 100%;
+  min-height: 4px;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(180deg, #14b8a6, #0f766e);
+}
+
+.analytics-bars__item span,
+.analytics-bars__item strong {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-style: normal;
+  font-weight: 850;
+  text-overflow: ellipsis;
+}
+
+.analytics-category-bars {
+  display: grid;
+  gap: 0.62rem;
+}
+
+.analytics-category-bars__row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1.1fr) minmax(5rem, 2fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.analytics-category-bars__row span {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analytics-category-bars__row i {
+  display: block;
+  overflow: hidden;
+  height: 0.78rem;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.1);
+}
+
+.analytics-category-bars__row b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.analytics-category-bars__row.is-fatal b {
+  background: var(--danger);
+}
+
+.analytics-category-bars__row.is-serious b {
+  background: var(--warning);
+}
+
+.analytics-category-bars__row strong {
+  font-size: 0.88rem;
+  font-weight: 950;
+  text-align: right;
+}
+
 .map-mode span {
   color: var(--muted);
   font-size: 0.74rem;
@@ -2242,5 +2481,64 @@ input[type="range"] {
   .app.app--chrome-hidden .fullscreen-toggle {
     top: max(10px, env(safe-area-inset-top));
     right: max(10px, env(safe-area-inset-right));
+  }
+}
+
+@media (max-width: 760px) {
+  .public-viewer__header {
+    right: 14px;
+    max-width: calc(100vw - 28px);
+    padding-right: 7.8rem;
+  }
+
+  .public-viewer__header p:last-child {
+    display: none;
+  }
+
+  .public-viewer__mode-toggle {
+    top: calc(max(14px, env(safe-area-inset-top)) + 0.45rem);
+  }
+
+  .public-viewer__mode-toggle button {
+    font-size: 0.76rem;
+    padding: 0.42rem 0.58rem;
+  }
+
+  .public-analytics {
+    padding: calc(max(7.9rem, env(safe-area-inset-top) + 7rem)) 0.72rem 6.7rem;
+  }
+
+  .analytics-metrics,
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-metrics {
+    gap: 0.5rem;
+  }
+
+  .analytics-metrics article {
+    min-height: 5.8rem;
+  }
+
+  .analytics-panel {
+    min-height: auto;
+  }
+
+  .analytics-category-bars__row {
+    grid-template-columns: minmax(5.6rem, 1fr) minmax(4rem, 1.4fr) auto;
+  }
+
+  .analytics-bars {
+    gap: 0.1rem;
+    min-height: 10rem;
+  }
+
+  .analytics-bars__item span {
+    display: none;
+  }
+
+  .analytics-bars__item strong {
+    font-size: 0.5rem;
   }
 }
