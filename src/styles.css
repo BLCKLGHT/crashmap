@@ -317,7 +317,7 @@ button:disabled {
 
 .analytics-line {
   width: 100%;
-  min-height: 13rem;
+  min-height: 15.5rem;
 }
 
 .analytics-line path {
@@ -334,19 +334,57 @@ button:disabled {
   stroke-width: 3;
 }
 
+.analytics-line__axis line {
+  stroke: rgba(20, 34, 28, 0.11);
+  stroke-width: 1;
+}
+
+.analytics-line__axis text,
+.analytics-line__x-label,
+.analytics-line__x-title {
+  fill: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 850;
+}
+
+.analytics-line__x-title {
+  fill: var(--ink);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.analytics-chart {
+  display: grid;
+  grid-template-columns: 3.1rem 1fr;
+  gap: 0.55rem;
+  align-items: stretch;
+  min-height: 15.4rem;
+}
+
+.analytics-chart__y-axis {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  align-items: end;
+  padding: 0.3rem 0 1.75rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-align: right;
+}
+
 .analytics-bars {
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));
   align-items: end;
   gap: 0.18rem;
-  min-height: 13rem;
+  min-height: 13.6rem;
   border-bottom: 1px solid rgba(20, 34, 28, 0.16);
   padding-top: 0.5rem;
 }
 
 .analytics-bars__item {
   display: grid;
-  grid-template-rows: 1fr auto auto;
+  grid-template-rows: 1fr auto;
   align-items: end;
   min-width: 0;
   height: 100%;
@@ -362,13 +400,22 @@ button:disabled {
 }
 
 .analytics-bars__item span,
-.analytics-bars__item strong {
+.analytics-chart__x-axis {
   overflow: hidden;
   color: var(--muted);
   font-size: 0.58rem;
   font-style: normal;
   font-weight: 850;
   text-overflow: ellipsis;
+}
+
+.analytics-chart__x-axis {
+  grid-column: 1 / -1;
+  margin-top: 0.35rem;
+  color: var(--ink);
+  font-size: 0.72rem;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 .analytics-category-bars {
@@ -385,7 +432,7 @@ button:disabled {
 
 .analytics-category-bars__row {
   display: grid;
-  grid-template-columns: minmax(7rem, 1.1fr) minmax(5rem, 2fr) auto;
+  grid-template-columns: minmax(9.5rem, 10rem) minmax(7rem, 1fr) minmax(4.4rem, auto);
   gap: 0.65rem;
   align-items: center;
 }

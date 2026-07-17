@@ -6,6 +6,7 @@ import {
   Gauge,
   Layers,
   Lightbulb,
+  MapPinned,
   ShieldAlert,
   TrendingUp,
 } from "lucide-react";
@@ -35,6 +36,8 @@ const isUnknownLabel = (value?: string): boolean => {
     !label ||
     label === "unknown" ||
     label.includes("unknown") ||
+    label === "not known" ||
+    label.includes("not known") ||
     label === "not supplied" ||
     label === "not stated" ||
     label === "unspecified"
@@ -61,6 +64,12 @@ const isPropertyDamageCrash = (crash: CrashRecord): boolean =>
   normalise(crash.severity).includes("property");
 
 const formatNumber = (value: number): string => value.toLocaleString("en-AU");
+
+const formatCompactNumber = (value: number): string =>
+  new Intl.NumberFormat("en-AU", {
+    notation: "compact",
+    maximumFractionDigits: value >= 1000 ? 1 : 0,
+  }).format(value);
 
 const getPercent = (value: number, total: number): string =>
   total > 0 ? `${Math.round((value / total) * 100)}%` : "0%";
@@ -119,54 +128,147 @@ const formatSpeedZoneLabel = (value?: string): string | undefined => {
   return Number.isFinite(speed) ? `${speed} km/h` : rawLabel;
 };
 
+const getSpeedZoneNumber = (value?: string): number | null => {
+  if (isUnknownLabel(value)) return null;
+  const numericMatch = value?.match(/\d+/);
+  if (!numericMatch) return null;
+  const speed = Number(numericMatch[0]);
+  return Number.isFinite(speed) ? speed : null;
+};
+
+const classifyRoadSetting = (crash: CrashRecord): string => {
+  const location = normalise(crash.locationDescription);
+  const speedZone = getSpeedZoneNumber(crash.speedZone);
+
+  if (
+    /\b(intersection|junction|roundabout|crossing|traffic lights|traffic signal|signalised|give way)\b/.test(
+      location,
+    ) ||
+    /\b(cnr|corner of|intersect|round about)\b/.test(location)
+  ) {
+    return "Intersections and junctions";
+  }
+
+  if (/\b(highway|hwy|motorway|freeway|expressway)\b/.test(location)) {
+    return "Highways";
+  }
+
+  if ((speedZone ?? 0) >= 80) {
+    return "Rural and open roads";
+  }
+
+  if (/\b(street|st|avenue|ave|drive|dr|crescent|cres|court|ct|lane|ln|road|rd)\b/.test(location)) {
+    return "Local streets";
+  }
+
+  return "Other road settings";
+};
+
 const getPeak = (points: SeriesPoint[]): SeriesPoint | null => {
   if (!points.length) return null;
   return points.reduce((peak, point) => (point.value > peak.value ? point : peak), points[0]);
 };
 
-const BarChart = ({ points, label }: { points: SeriesPoint[]; label: string }) => {
+const BarChart = ({
+  points,
+  label,
+  xAxisLabel,
+}: {
+  points: SeriesPoint[];
+  label: string;
+  xAxisLabel: string;
+}) => {
   const max = Math.max(...points.map((point) => point.value), 1);
+  const mid = Math.round(max / 2);
 
   return (
-    <div className="analytics-bars" aria-label={label}>
-      {points.map((point) => (
-        <div className="analytics-bars__item" key={point.label}>
-          <span>{point.label}</span>
-          <i style={{ height: `${Math.max(4, (point.value / max) * 100)}%` }} />
-          <strong>{formatNumber(point.value)}</strong>
-        </div>
-      ))}
+    <div className="analytics-chart" aria-label={label}>
+      <div className="analytics-chart__y-axis" aria-hidden="true">
+        <span>{formatCompactNumber(max)}</span>
+        <span>{formatCompactNumber(mid)}</span>
+        <span>0</span>
+      </div>
+      <div className="analytics-bars">
+        {points.map((point) => (
+          <div className="analytics-bars__item" key={point.label}>
+            <i style={{ height: `${Math.max(4, (point.value / max) * 100)}%` }} />
+            <span>{point.label}</span>
+          </div>
+        ))}
+        <strong className="analytics-chart__x-axis">{xAxisLabel}</strong>
+      </div>
     </div>
   );
 };
 
-const LineChart = ({ points, label }: { points: SeriesPoint[]; label: string }) => {
+const LineChart = ({
+  points,
+  label,
+  xAxisLabel,
+}: {
+  points: SeriesPoint[];
+  label: string;
+  xAxisLabel: string;
+}) => {
   const max = Math.max(...points.map((point) => point.value), 1);
   const width = 720;
-  const height = 210;
-  const padding = 22;
+  const height = 250;
+  const paddingTop = 18;
+  const paddingRight = 18;
+  const paddingBottom = 48;
+  const paddingLeft = 66;
+  const chartWidth = width - paddingLeft - paddingRight;
+  const chartHeight = height - paddingTop - paddingBottom;
+  const yTicks = [max, Math.round(max / 2), 0];
+  const xTickEvery = Math.max(1, Math.ceil(points.length / 6));
   const path = points
     .map((point, index) => {
       const x =
         points.length <= 1
           ? width / 2
-          : padding + (index / (points.length - 1)) * (width - padding * 2);
-      const y = height - padding - (point.value / max) * (height - padding * 2);
+          : paddingLeft + (index / (points.length - 1)) * chartWidth;
+      const y = paddingTop + chartHeight - (point.value / max) * chartHeight;
       return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(" ");
 
   return (
     <svg className="analytics-line" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label}>
+      {yTicks.map((tick) => {
+        const y = paddingTop + chartHeight - (tick / max) * chartHeight;
+        return (
+          <g className="analytics-line__axis" key={tick} aria-hidden="true">
+            <line x1={paddingLeft} x2={width - paddingRight} y1={y} y2={y} />
+            <text x={paddingLeft - 10} y={y + 4} textAnchor="end">
+              {formatCompactNumber(tick)}
+            </text>
+          </g>
+        );
+      })}
       <path d={path} />
       {points.map((point, index) => {
         const x =
           points.length <= 1
             ? width / 2
-            : padding + (index / (points.length - 1)) * (width - padding * 2);
-        const y = height - padding - (point.value / max) * (height - padding * 2);
+            : paddingLeft + (index / (points.length - 1)) * chartWidth;
+        const y = paddingTop + chartHeight - (point.value / max) * chartHeight;
         return <circle key={point.label} cx={x} cy={y} r="3.8" />;
       })}
+      {points.map((point, index) => {
+        if (index % xTickEvery !== 0 && index !== points.length - 1) return null;
+        const x =
+          points.length <= 1
+            ? width / 2
+            : paddingLeft + (index / (points.length - 1)) * chartWidth;
+        return (
+          <text className="analytics-line__x-label" key={point.label} x={x} y={height - 22} textAnchor="middle">
+            {point.label}
+          </text>
+        );
+      })}
+      <text className="analytics-line__x-title" x={paddingLeft + chartWidth / 2} y={height - 4} textAnchor="middle">
+        {xAxisLabel}
+      </text>
     </svg>
   );
 };
@@ -240,8 +342,10 @@ export function PublicAnalytics({ crashes, totalCrashes }: PublicAnalyticsProps)
   const speedZonePoints = getTopCategories(crashes, (crash) =>
     formatSpeedZoneLabel(crash.speedZone),
   );
+  const roadSettingPoints = getTopCategories(crashes, classifyRoadSetting, 5);
   const topSurface = surfacePoints[0];
   const topLight = lightPoints[0];
+  const topRoadSetting = roadSettingPoints[0];
 
   return (
     <section className="public-analytics" aria-label="Crash data analytics">
@@ -298,7 +402,7 @@ export function PublicAnalytics({ crashes, totalCrashes }: PublicAnalyticsProps)
                 : "No dated records are available for this selection."}
             </p>
           </PanelHeading>
-          <LineChart points={yearSeries} label="Crashes by year" />
+          <LineChart points={yearSeries} label="Crashes by year" xAxisLabel="Year" />
         </article>
 
         <article className="analytics-panel">
@@ -314,7 +418,7 @@ export function PublicAnalytics({ crashes, totalCrashes }: PublicAnalyticsProps)
                 : "No hourly pattern is available."}
             </p>
           </PanelHeading>
-          <BarChart points={hourSeries} label="Crashes by hour of day" />
+          <BarChart points={hourSeries} label="Crashes by hour of day" xAxisLabel="Hour of day" />
         </article>
 
         <article className="analytics-panel">
@@ -351,6 +455,21 @@ export function PublicAnalytics({ crashes, totalCrashes }: PublicAnalyticsProps)
             </p>
           </PanelHeading>
           <CategoryBars points={speedZonePoints} />
+        </article>
+
+        <article className="analytics-panel analytics-panel--wide">
+          <PanelHeading
+            icon={<MapPinned size={20} />}
+            label="Road setting"
+            title="Where records tend to occur"
+          >
+            <p>
+              {topRoadSetting
+                ? `${topRoadSetting.label} is the largest inferred setting in this selection.`
+                : "No road setting pattern is available for this selection."}
+            </p>
+          </PanelHeading>
+          <CategoryBars points={roadSettingPoints} />
         </article>
       </div>
     </section>
