@@ -60,8 +60,10 @@ const TASMANIA_BOUNDS: [[number, number], [number, number]] = [
   [148.65, -39.55],
 ];
 const TASMANIA_CENTRE: [number, number] = [146.6, -42.05];
+const CLUSTER_MIN_ZOOM = 6.4;
 const CLUSTER_MAX_ZOOM = 12;
-const POINT_MIN_ZOOM = 12.5;
+const CLUSTER_LAYER_MAX_ZOOM = 12.6;
+const POINT_MIN_ZOOM = 12;
 const DRIVE_ZOOM = 15.5;
 
 const getStyleForPhase = (phase: CrashMapProps["timePhase"]): string =>
@@ -195,6 +197,7 @@ export function CrashMap({
   const [runtimeToken, setRuntimeToken] = useState<string | null>(buildTimeToken ?? null);
   const [status, setStatus] = useState(buildTimeToken ? "loading" : "checking-token");
   const [isMapReady, setIsMapReady] = useState(false);
+  const [mapZoom, setMapZoom] = useState(6);
   const token = runtimeToken ?? buildTimeToken;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -308,7 +311,7 @@ export function CrashMap({
             id: HEATMAP_LAYER_ID,
             type: "heatmap",
             source: CRASH_SOURCE_ID,
-            maxzoom: 11,
+            maxzoom: 10.8,
             paint: {
               "heatmap-weight": [
                 "interpolate",
@@ -319,9 +322,19 @@ export function CrashMap({
                 1,
                 1,
               ],
-              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 5, 0.45, 10, 1.35],
-              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 5, 7, 10, 24],
-              "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.78, 11, 0.18],
+              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 10, 1.2],
+              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 5, 9, 10, 22],
+              "heatmap-opacity": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                5.2,
+                0.66,
+                8,
+                0.46,
+                10.8,
+                0,
+              ],
               "heatmap-color": [
                 "interpolate",
                 ["linear"],
@@ -344,8 +357,8 @@ export function CrashMap({
             id: CLUSTER_LAYER_ID,
             type: "circle",
             source: CRASH_SOURCE_ID,
-            minzoom: 8.5,
-            maxzoom: POINT_MIN_ZOOM,
+            minzoom: CLUSTER_MIN_ZOOM,
+            maxzoom: CLUSTER_LAYER_MAX_ZOOM,
             filter: ["has", "point_count"],
             paint: {
               "circle-color": [
@@ -361,15 +374,35 @@ export function CrashMap({
                 ["linear"],
                 ["get", "point_count"],
                 1,
-                15,
+                12,
                 80,
-                25,
+                24,
                 500,
-                38,
+                36,
+                5000,
+                52,
               ],
-              "circle-opacity": 0.82,
-              "circle-stroke-color": "rgba(255, 255, 255, 0.86)",
-              "circle-stroke-width": 1.5,
+              "circle-opacity": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                CLUSTER_MIN_ZOOM,
+                0.74,
+                11.8,
+                0.84,
+                CLUSTER_LAYER_MAX_ZOOM,
+                0.24,
+              ],
+              "circle-stroke-color": "rgba(255, 255, 255, 0.88)",
+              "circle-stroke-width": [
+                "interpolate",
+                ["linear"],
+                ["get", "point_count"],
+                1,
+                1.1,
+                500,
+                2,
+              ],
             },
           });
 
@@ -377,16 +410,25 @@ export function CrashMap({
             id: CLUSTER_COUNT_LAYER_ID,
             type: "symbol",
             source: CRASH_SOURCE_ID,
-            minzoom: 8.5,
-            maxzoom: POINT_MIN_ZOOM,
+            minzoom: CLUSTER_MIN_ZOOM,
+            maxzoom: CLUSTER_LAYER_MAX_ZOOM,
             filter: ["has", "point_count"],
             layout: {
               "text-field": ["get", "point_count_abbreviated"],
               "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
-              "text-size": 12,
+              "text-size": ["interpolate", ["linear"], ["zoom"], 6.4, 10, 10, 12, 12.6, 11],
             },
             paint: {
               "text-color": "#ffffff",
+              "text-opacity": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                11.8,
+                1,
+                CLUSTER_LAYER_MAX_ZOOM,
+                0.28,
+              ],
             },
           });
 
@@ -401,8 +443,8 @@ export function CrashMap({
                 "interpolate",
                 ["linear"],
                 ["zoom"],
-                12.5,
-                8,
+                POINT_MIN_ZOOM,
+                ["match", ["get", "severityRank"], 3, 14, 2, 11, 8],
                 17,
                 18,
               ],
@@ -420,10 +462,10 @@ export function CrashMap({
                 "match",
                 ["get", "severityRank"],
                 3,
-                0.34,
+                0.38,
                 2,
-                0.22,
-                0.12,
+                0.26,
+                0.16,
               ],
             },
           });
@@ -439,8 +481,8 @@ export function CrashMap({
                 "interpolate",
                 ["linear"],
                 ["zoom"],
-                12.5,
-                ["match", ["get", "severityRank"], 3, 5, 2, 4, 3],
+                POINT_MIN_ZOOM,
+                ["match", ["get", "severityRank"], 3, 6, 2, 4.8, 3.8],
                 17,
                 ["match", ["get", "severityRank"], 3, 8, 2, 5, 4],
               ],
@@ -521,7 +563,12 @@ export function CrashMap({
             duration: 0,
           });
           setIsMapReady(true);
+          setMapZoom(map.getZoom());
           setStatus("ready");
+        });
+
+        map.on("zoomend", () => {
+          setMapZoom(map.getZoom());
         });
 
         map.on("click", CLUSTER_LAYER_ID, (event) => {
@@ -662,6 +709,13 @@ export function CrashMap({
     window.requestAnimationFrame(() => map.resize());
   }, [isMapReady]);
 
+  const visualModeLabel =
+    mapZoom < CLUSTER_MIN_ZOOM
+      ? "Heat glow shows broad crash concentration"
+      : mapZoom < POINT_MIN_ZOOM
+        ? "Circles group nearby crashes by count and severity"
+        : "Dots show individual crash records";
+
   return (
     <section className={`map-shell map-shell--${timePhase}`}>
       <div ref={containerRef} className="map map--mapbox" />
@@ -679,7 +733,7 @@ export function CrashMap({
         <span>
           {driveMode?.isActive
             ? "Following current position"
-            : "Heatmap, clusters and incident dots"}
+            : visualModeLabel}
         </span>
       </div>
     </section>
