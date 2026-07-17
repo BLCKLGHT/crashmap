@@ -33,8 +33,28 @@ type CachedCrashPayload = {
 
 type StaticCrashPayload = {
   generatedAt?: string;
-  crashes?: CrashRecord[];
+  encoding?: string;
+  dictionaries?: {
+    severity?: string[];
+    speedZone?: string[];
+    surfaceType?: string[];
+    lightCondition?: string[];
+    locationDescription?: string[];
+  };
+  crashes?: CrashRecord[] | PackedCrashRecord[];
 };
+
+type PackedCrashRecord = [
+  id: string,
+  latitude: number,
+  longitude: number,
+  dateTime?: string | number | null,
+  severityIndex?: number | null,
+  speedZoneIndex?: number | null,
+  surfaceTypeIndex?: number | null,
+  lightConditionIndex?: number | null,
+  locationDescriptionIndex?: number | null,
+];
 
 const openCrashDb = (): Promise<IDBDatabase> =>
   new Promise((resolve, reject) => {
@@ -145,18 +165,39 @@ const fetchCrashPage = async (resultOffset: number): Promise<ArcGisFeature[]> =>
   return data.features ?? [];
 };
 
-const normaliseStaticCrashPayload = (payload: unknown): CrashRecord[] => {
-  let records: unknown[] = [];
-  if (Array.isArray(payload)) {
-    records = payload;
-  } else {
-    const staticPayload = payload as StaticCrashPayload | null;
-    if (Array.isArray(staticPayload?.crashes)) {
-      records = staticPayload.crashes;
-    }
+const getDictionaryValue = (
+  values: string[] | undefined,
+  index: number | null | undefined,
+): string | undefined => {
+  if (typeof index !== "number") return undefined;
+  return values?.[index];
+};
+
+const unpackStaticCrashPayload = (payload: StaticCrashPayload): CrashRecord[] => {
+  if (payload.encoding !== "tas-crash-tuples-v1" || !Array.isArray(payload.crashes)) {
+    return [];
   }
 
-  return records.filter((record): record is CrashRecord => {
+  return payload.crashes
+    .filter((row): row is PackedCrashRecord => Array.isArray(row))
+    .map((row) => ({
+      id: String(row[0]),
+      latitude: row[1],
+      longitude: row[2],
+      dateTime: asOptionalString(row[3]),
+      severity: getDictionaryValue(payload.dictionaries?.severity, row[4]),
+      speedZone: getDictionaryValue(payload.dictionaries?.speedZone, row[5]),
+      surfaceType: getDictionaryValue(payload.dictionaries?.surfaceType, row[6]),
+      lightCondition: getDictionaryValue(payload.dictionaries?.lightCondition, row[7]),
+      locationDescription: getDictionaryValue(
+        payload.dictionaries?.locationDescription,
+        row[8],
+      ),
+    }));
+};
+
+const normaliseCrashRecords = (records: unknown[]): CrashRecord[] =>
+  records.filter((record): record is CrashRecord => {
     if (!record || typeof record !== "object") return false;
     const candidate = record as Partial<CrashRecord>;
     return (
@@ -167,6 +208,21 @@ const normaliseStaticCrashPayload = (payload: unknown): CrashRecord[] => {
       Number.isFinite(candidate.longitude)
     );
   });
+
+const normaliseStaticCrashPayload = (payload: unknown): CrashRecord[] => {
+  if (Array.isArray(payload)) {
+    return normaliseCrashRecords(payload);
+  }
+
+  const staticPayload = payload as StaticCrashPayload | null;
+  if (!staticPayload) return [];
+
+  const unpackedRecords = unpackStaticCrashPayload(staticPayload);
+  if (unpackedRecords.length) return normaliseCrashRecords(unpackedRecords);
+
+  return Array.isArray(staticPayload.crashes)
+    ? normaliseCrashRecords(staticPayload.crashes)
+    : [];
 };
 
 const fetchStaticCrashData = async (

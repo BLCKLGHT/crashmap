@@ -119,6 +119,55 @@ const fetchAllCrashData = async () => {
   return records;
 };
 
+const createDictionary = () => {
+  const values = [];
+  const indexes = new Map();
+
+  return {
+    values,
+    getIndex(value) {
+      if (!value) return null;
+      const existing = indexes.get(value);
+      if (existing !== undefined) return existing;
+      const index = values.length;
+      indexes.set(value, index);
+      values.push(value);
+      return index;
+    },
+  };
+};
+
+const packCrashData = (crashes) => {
+  const severity = createDictionary();
+  const speedZone = createDictionary();
+  const surfaceType = createDictionary();
+  const lightCondition = createDictionary();
+  const locationDescription = createDictionary();
+
+  const rows = crashes.map((crash) => [
+    crash.id,
+    Math.round(crash.latitude * 1_000_000) / 1_000_000,
+    Math.round(crash.longitude * 1_000_000) / 1_000_000,
+    crash.dateTime ?? null,
+    severity.getIndex(crash.severity),
+    speedZone.getIndex(crash.speedZone),
+    surfaceType.getIndex(crash.surfaceType),
+    lightCondition.getIndex(crash.lightCondition),
+    locationDescription.getIndex(crash.locationDescription),
+  ]);
+
+  return {
+    dictionaries: {
+      severity: severity.values,
+      speedZone: speedZone.values,
+      surfaceType: surfaceType.values,
+      lightCondition: lightCondition.values,
+      locationDescription: locationDescription.values,
+    },
+    rows,
+  };
+};
+
 const main = async () => {
   if (process.env.SKIP_CRASH_DATA_PRECACHE === "1") {
     console.log("Crash data precache skipped via SKIP_CRASH_DATA_PRECACHE=1.");
@@ -127,12 +176,15 @@ const main = async () => {
 
   try {
     const crashes = await fetchAllCrashData();
+    const packed = packCrashData(crashes);
     const payload = {
-      schemaVersion: 1,
+      schemaVersion: 2,
+      encoding: "tas-crash-tuples-v1",
       source: QUERY_URL,
       generatedAt: new Date().toISOString(),
       count: crashes.length,
-      crashes,
+      dictionaries: packed.dictionaries,
+      crashes: packed.rows,
     };
 
     await mkdir(dirname(OUTPUT_PATH), { recursive: true });

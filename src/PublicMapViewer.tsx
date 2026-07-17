@@ -3,12 +3,7 @@ import { CrashMap } from "./components/CrashMap";
 import { ErrorState } from "./components/ErrorState";
 import { FilterPanel } from "./components/FilterPanel";
 import { LoadingState } from "./components/LoadingState";
-import {
-  clearCachedCrashData,
-  fetchAllTasCrashData,
-  readCachedCrashData,
-  writeCachedCrashData,
-} from "./data/crashData";
+import { fetchAllTasCrashData } from "./data/crashData";
 import { defaultFilters, filterCrashes } from "./data/filterCrashes";
 import type { CrashDataState, CrashFilters, CrashRecord, TimelineState } from "./types/crash";
 
@@ -77,20 +72,8 @@ export function PublicMapViewer() {
 
     try {
       setLoadedCount(0);
-      if (!refresh) {
-        const cached = await readCachedCrashData();
-        if (cached) {
-          setDataState({ crashes: cached.crashes, fetchedAt: cached.fetchedAt });
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      if (refresh) await clearCachedCrashData();
-
       const crashes = await fetchAllTasCrashData(setLoadedCount);
-      const cached = await writeCachedCrashData(crashes);
-      setDataState({ crashes: cached.crashes, fetchedAt: cached.fetchedAt });
+      setDataState({ crashes, fetchedAt: new Date().toISOString() });
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -272,8 +255,8 @@ export function PublicMapViewer() {
         <LoadingState
           message={
             loadedCount > 0
-              ? `Loaded ${loadedCount.toLocaleString("en-AU")} records. Caching after download completes.`
-              : "Loading historical crash data. The first download is large and will be cached."
+              ? `Loaded ${loadedCount.toLocaleString("en-AU")} records. Preparing the map.`
+              : "Loading historical crash data from the map CDN."
           }
         />
       )}
