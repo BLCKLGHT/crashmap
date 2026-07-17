@@ -32,6 +32,11 @@ body,
   overflow: hidden;
 }
 
+html,
+body {
+  background: #170808;
+}
+
 button,
 select {
   font: inherit;
@@ -1001,6 +1006,7 @@ button:disabled {
   color: rgba(255, 255, 255, 0.82);
   font-size: clamp(1rem, 4.6vw, 1.45rem);
   font-weight: 950;
+  letter-spacing: 0.04em;
   line-height: 1;
 }
 
@@ -1017,6 +1023,67 @@ button:disabled {
 
 .dashboard-history--empty {
   background: rgba(255, 255, 255, 0.035);
+}
+
+.app--dashboard-mode.app--chrome-hidden {
+  background: #170808;
+}
+
+.app--dashboard-mode.app--chrome-hidden .dashboard-mode {
+  grid-template-rows: minmax(18rem, 33dvh) minmax(13.5rem, 24dvh) 1fr;
+}
+
+.app--dashboard-mode.app--chrome-hidden .dashboard-mode__top {
+  grid-template-columns: minmax(8.6rem, 0.92fr) minmax(9.5rem, 1fr);
+  align-items: end;
+  gap: clamp(0.75rem, 4vw, 1.4rem);
+  padding: calc(max(12px, env(safe-area-inset-top)) + 3.65rem)
+    max(1.05rem, env(safe-area-inset-right))
+    1.05rem
+    max(1.05rem, env(safe-area-inset-left));
+}
+
+.app--dashboard-mode.app--chrome-hidden .dashboard-speed-sign {
+  width: clamp(8.6rem, 37vw, 10.7rem);
+  border-width: clamp(0.72rem, 3.1vw, 0.95rem);
+  font-size: clamp(3.15rem, 14vw, 4.35rem);
+}
+
+.app--dashboard-mode.app--chrome-hidden .dashboard-speed-readout strong {
+  font-size: clamp(4.7rem, 20vw, 6.55rem);
+}
+
+.app--dashboard-mode.app--chrome-hidden .dashboard-speed-readout span {
+  font-size: clamp(0.82rem, 3vw, 1rem);
+}
+
+.app--dashboard-mode.app--chrome-hidden .dashboard-speed-readout small {
+  font-size: clamp(0.95rem, 3.5vw, 1.2rem);
+}
+
+.app--dashboard-mode.app--chrome-hidden .dashboard-overspeed {
+  top: calc(33dvh - 3.15rem);
+  z-index: 44;
+  min-width: min(18rem, calc(100vw - 3rem));
+  border-width: 2.5px;
+  border-radius: 14px;
+  padding: 0.82rem 1.25rem 0.9rem;
+}
+
+.app--dashboard-mode.app--chrome-hidden .dashboard-overspeed strong {
+  font-size: clamp(3rem, 13vw, 4.2rem);
+}
+
+.app--dashboard-mode.app--chrome-hidden .dashboard-overspeed small {
+  font-size: clamp(1rem, 4vw, 1.2rem);
+}
+
+.app--dashboard-mode.app--chrome-hidden .dashboard-distance p {
+  margin-top: 0.28rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: clamp(0.78rem, 3.2vw, 0.98rem);
+  font-weight: 900;
+  text-transform: none;
 }
 
 .dashboard-history__map {

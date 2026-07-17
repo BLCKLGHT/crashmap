@@ -284,8 +284,8 @@ export function DashboardMode({
         aria-label={`Recommended space ${carLengths} car lengths`}
       >
         <strong className="dashboard-distance__number">{carLengths || "--"}</strong>
-        <span className="dashboard-distance__unit">car lengths</span>
-        <p>recommended space at current speed</p>
+        <span className="dashboard-distance__unit">CAR LENGTHS</span>
+        <p>Safe Braking Distance</p>
         <div className="dashboard-cars" aria-hidden="true">
           {Array.from({ length: visibleCars }).map((_, index) => (
             <Car key={index} size={44} strokeWidth={2.35} />
