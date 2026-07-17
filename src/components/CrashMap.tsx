@@ -52,6 +52,8 @@ const VEHICLE_SOURCE_ID = "mapbox-drive-location";
 const HEATMAP_LAYER_ID = "mapbox-crash-heatmap";
 const CLUSTER_LAYER_ID = "mapbox-crash-clusters";
 const CLUSTER_COUNT_LAYER_ID = "mapbox-crash-cluster-count";
+const SINGLE_COUNT_LAYER_ID = "mapbox-crash-single-counts";
+const SINGLE_COUNT_TEXT_LAYER_ID = "mapbox-crash-single-count-labels";
 const CRASH_GLOW_LAYER_ID = "mapbox-crash-glow";
 const CRASH_DOT_LAYER_ID = "mapbox-crash-dots";
 const VEHICLE_ACCURACY_LAYER_ID = "mapbox-drive-accuracy";
@@ -60,7 +62,7 @@ const TASMANIA_BOUNDS: [[number, number], [number, number]] = [
   [148.65, -39.55],
 ];
 const TASMANIA_CENTRE: [number, number] = [146.6, -42.05];
-const CLUSTER_MIN_ZOOM = 6.4;
+const CLUSTER_MIN_ZOOM = 5.5;
 const CLUSTER_MAX_ZOOM = 12;
 const CLUSTER_LAYER_MAX_ZOOM = 12.6;
 const POINT_MIN_ZOOM = 12;
@@ -311,7 +313,7 @@ export function CrashMap({
             id: HEATMAP_LAYER_ID,
             type: "heatmap",
             source: CRASH_SOURCE_ID,
-            maxzoom: 10.8,
+            maxzoom: CLUSTER_MIN_ZOOM,
             paint: {
               "heatmap-weight": [
                 "interpolate",
@@ -322,17 +324,15 @@ export function CrashMap({
                 1,
                 1,
               ],
-              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 10, 1.2],
-              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 5, 9, 10, 22],
+              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 4.8, 0.55, 5.5, 0.8],
+              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 4.8, 8, 5.5, 13],
               "heatmap-opacity": [
                 "interpolate",
                 ["linear"],
                 ["zoom"],
-                5.2,
-                0.66,
-                8,
-                0.46,
-                10.8,
+                4.8,
+                0.56,
+                CLUSTER_MIN_ZOOM,
                 0,
               ],
               "heatmap-color": [
@@ -387,9 +387,9 @@ export function CrashMap({
                 ["linear"],
                 ["zoom"],
                 CLUSTER_MIN_ZOOM,
-                0.74,
+                0.58,
                 11.8,
-                0.84,
+                0.76,
                 CLUSTER_LAYER_MAX_ZOOM,
                 0.24,
               ],
@@ -429,6 +429,48 @@ export function CrashMap({
                 CLUSTER_LAYER_MAX_ZOOM,
                 0.28,
               ],
+            },
+          });
+
+          map.addLayer({
+            id: SINGLE_COUNT_LAYER_ID,
+            type: "circle",
+            source: CRASH_SOURCE_ID,
+            minzoom: CLUSTER_MIN_ZOOM,
+            maxzoom: POINT_MIN_ZOOM,
+            filter: ["!", ["has", "point_count"]],
+            paint: {
+              "circle-color": [
+                "match",
+                ["get", "severityRank"],
+                3,
+                "#dc2626",
+                2,
+                "#f97316",
+                "#0f766e",
+              ],
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 5.5, 8, 10, 11, 12, 13],
+              "circle-opacity": ["interpolate", ["linear"], ["zoom"], 5.5, 0.5, 11.8, 0.62],
+              "circle-stroke-color": "rgba(255, 255, 255, 0.88)",
+              "circle-stroke-width": 1.1,
+            },
+          });
+
+          map.addLayer({
+            id: SINGLE_COUNT_TEXT_LAYER_ID,
+            type: "symbol",
+            source: CRASH_SOURCE_ID,
+            minzoom: CLUSTER_MIN_ZOOM,
+            maxzoom: POINT_MIN_ZOOM,
+            filter: ["!", ["has", "point_count"]],
+            layout: {
+              "text-field": "1",
+              "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
+              "text-size": ["interpolate", ["linear"], ["zoom"], 5.5, 9, 10, 10.5, 12, 11],
+            },
+            paint: {
+              "text-color": "#ffffff",
+              "text-opacity": ["interpolate", ["linear"], ["zoom"], 5.5, 0.72, 11.8, 0.9],
             },
           });
 
@@ -602,6 +644,20 @@ export function CrashMap({
             .addTo(map);
         });
 
+        map.on("click", SINGLE_COUNT_LAYER_ID, (event) => {
+          const feature = event.features?.[0];
+          if (!feature || feature.geometry.type !== "Point") return;
+          popupRef.current?.remove();
+          popupRef.current = new mapboxgl.Popup({
+            closeButton: true,
+            closeOnClick: true,
+            maxWidth: "280px",
+          })
+            .setLngLat(feature.geometry.coordinates as [number, number])
+            .setHTML(popupHtml(feature.properties as CrashFeatureProperties))
+            .addTo(map);
+        });
+
         map.on("mouseenter", CLUSTER_LAYER_ID, () => {
           map.getCanvas().style.cursor = "pointer";
         });
@@ -614,12 +670,24 @@ export function CrashMap({
         map.on("mouseleave", CRASH_DOT_LAYER_ID, () => {
           map.getCanvas().style.cursor = "";
         });
+        map.on("mouseenter", SINGLE_COUNT_LAYER_ID, () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", SINGLE_COUNT_LAYER_ID, () => {
+          map.getCanvas().style.cursor = "";
+        });
 
         map.on("click", (event: MapMouseEvent) => {
           const simulation = simulationRef.current;
           if (!simulation?.isSimulation) return;
           const features = map.queryRenderedFeatures(event.point, {
-            layers: [CRASH_DOT_LAYER_ID, CLUSTER_LAYER_ID],
+            layers: [
+              CRASH_DOT_LAYER_ID,
+              SINGLE_COUNT_LAYER_ID,
+              SINGLE_COUNT_TEXT_LAYER_ID,
+              CLUSTER_LAYER_ID,
+              CLUSTER_COUNT_LAYER_ID,
+            ],
           });
           if (features.length) return;
           simulation.onSimulatedLocationChange({

@@ -2090,6 +2090,10 @@ input[type="range"] {
     right: 26rem;
   }
 
+  .public-viewer__mode-toggle {
+    right: 26rem;
+  }
+
   .app.app--chrome-hidden .fullscreen-toggle {
     right: 12px;
   }
