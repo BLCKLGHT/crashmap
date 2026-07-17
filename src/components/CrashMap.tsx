@@ -63,9 +63,10 @@ const TASMANIA_BOUNDS: [[number, number], [number, number]] = [
 ];
 const TASMANIA_CENTRE: [number, number] = [146.6, -42.05];
 const CLUSTER_MIN_ZOOM = 5.5;
-const CLUSTER_MAX_ZOOM = 12;
+const CLUSTER_MAX_ZOOM = 11;
 const CLUSTER_LAYER_MAX_ZOOM = 12.6;
 const POINT_MIN_ZOOM = 12;
+const SINGLE_COUNT_MAX_ZOOM = 12.35;
 const DRIVE_ZOOM = 15.5;
 
 const getStyleForPhase = (phase: CrashMapProps["timePhase"]): string =>
@@ -437,7 +438,7 @@ export function CrashMap({
             type: "circle",
             source: CRASH_SOURCE_ID,
             minzoom: CLUSTER_MIN_ZOOM,
-            maxzoom: POINT_MIN_ZOOM,
+            maxzoom: SINGLE_COUNT_MAX_ZOOM,
             filter: ["!", ["has", "point_count"]],
             paint: {
               "circle-color": [
@@ -450,7 +451,17 @@ export function CrashMap({
                 "#0f766e",
               ],
               "circle-radius": ["interpolate", ["linear"], ["zoom"], 5.5, 8, 10, 11, 12, 13],
-              "circle-opacity": ["interpolate", ["linear"], ["zoom"], 5.5, 0.5, 11.8, 0.62],
+              "circle-opacity": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                5.5,
+                0.5,
+                11.8,
+                0.62,
+                SINGLE_COUNT_MAX_ZOOM,
+                0,
+              ],
               "circle-stroke-color": "rgba(255, 255, 255, 0.88)",
               "circle-stroke-width": 1.1,
             },
@@ -461,7 +472,7 @@ export function CrashMap({
             type: "symbol",
             source: CRASH_SOURCE_ID,
             minzoom: CLUSTER_MIN_ZOOM,
-            maxzoom: POINT_MIN_ZOOM,
+            maxzoom: SINGLE_COUNT_MAX_ZOOM,
             filter: ["!", ["has", "point_count"]],
             layout: {
               "text-field": "1",
@@ -470,7 +481,17 @@ export function CrashMap({
             },
             paint: {
               "text-color": "#ffffff",
-              "text-opacity": ["interpolate", ["linear"], ["zoom"], 5.5, 0.72, 11.8, 0.9],
+              "text-opacity": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                5.5,
+                0.72,
+                11.8,
+                0.9,
+                SINGLE_COUNT_MAX_ZOOM,
+                0,
+              ],
             },
           });
 
