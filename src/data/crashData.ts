@@ -2,6 +2,7 @@ import type { CrashRecord } from "../types/crash";
 
 const QUERY_URL =
   "https://data.stategrowth.tas.gov.au/ags/rest/services/PUBLIC/CDM_CRASH/FeatureServer/0/query";
+const STATIC_CRASH_DATA_URL = "/data/tas-crashes.json";
 const PAGE_SIZE = 2000;
 const PAGE_BATCH_SIZE = 6;
 const DB_NAME = "tasmania-crash-map";
@@ -24,6 +25,11 @@ type ArcGisGeoJson = {
 type CachedCrashPayload = {
   fetchedAt: string;
   crashes: CrashRecord[];
+};
+
+type StaticCrashPayload = {
+  generatedAt?: string;
+  crashes?: CrashRecord[];
 };
 
 const openCrashDb = (): Promise<IDBDatabase> =>
@@ -105,7 +111,7 @@ const buildQueryUrl = (resultOffset: number): string => {
   const params = new URLSearchParams({
     where: "1=1",
     outFields:
-      "ID,VCRN,DESCRIPTION,CRASH_DATE_TIME,SEVERITY,SPEED_ZONE,SURFACE_TYPE,LIGHT_CONDITION,LOCATION_DESCRIPTION",
+      "ID,VCRN,DESCRIPTION,CRASH_DATE_TIME,SEVERITY,SPEED_ZONE,SURFACE_TYPE,LIGHT_CONDITION,WEATHER_CONDITION,LOCATION_DESCRIPTION",
     returnGeometry: "true",
     outSR: "4326",
     f: "geojson",
@@ -130,9 +136,63 @@ const fetchCrashPage = async (resultOffset: number): Promise<ArcGisFeature[]> =>
   return data.features ?? [];
 };
 
+const normaliseStaticCrashPayload = (payload: unknown): CrashRecord[] => {
+  let records: unknown[] = [];
+  if (Array.isArray(payload)) {
+    records = payload;
+  } else {
+    const staticPayload = payload as StaticCrashPayload | null;
+    if (Array.isArray(staticPayload?.crashes)) {
+      records = staticPayload.crashes;
+    }
+  }
+
+  return records.filter((record): record is CrashRecord => {
+    if (!record || typeof record !== "object") return false;
+    const candidate = record as Partial<CrashRecord>;
+    return (
+      typeof candidate.id === "string" &&
+      typeof candidate.latitude === "number" &&
+      typeof candidate.longitude === "number" &&
+      Number.isFinite(candidate.latitude) &&
+      Number.isFinite(candidate.longitude)
+    );
+  });
+};
+
+const fetchStaticCrashData = async (
+  onProgress?: (loadedCount: number) => void,
+): Promise<CrashRecord[]> => {
+  const response = await fetch(STATIC_CRASH_DATA_URL, {
+    cache: "force-cache",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Static crash data request failed with status ${response.status}`);
+  }
+
+  const records = normaliseStaticCrashPayload(await response.json());
+  if (!records.length) {
+    throw new Error("Static crash data file contained no usable crash records.");
+  }
+
+  onProgress?.(records.length);
+  return records;
+};
+
 export async function fetchAllTasCrashData(
   onProgress?: (loadedCount: number) => void,
 ): Promise<CrashRecord[]> {
+  try {
+    return await fetchStaticCrashData(onProgress);
+  } catch (error) {
+    console.warn(
+      error instanceof Error
+        ? `Static crash data unavailable: ${error.message}`
+        : "Static crash data unavailable.",
+    );
+  }
+
   const records: CrashRecord[] = [];
   let resultOffset = 0;
 
