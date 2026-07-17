@@ -1632,8 +1632,8 @@ function App() {
         <LoadingState
           message={
             loadedCount > 0
-              ? `Loaded ${loadedCount.toLocaleString("en-AU")} records. Caching after download completes.`
-              : "Loading historical crash data. The first download is large and will be cached."
+              ? `Loaded ${loadedCount.toLocaleString("en-AU")} records. Preparing the map.`
+              : "Loading historical crash data."
           }
         />
       )}

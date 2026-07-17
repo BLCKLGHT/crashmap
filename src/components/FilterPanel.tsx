@@ -46,7 +46,7 @@ type FilterPanelProps = {
 };
 
 const formatFetchedAt = (value?: string): string => {
-  if (!value) return "No cached data yet";
+  if (!value) return "Not loaded yet";
   return new Intl.DateTimeFormat("en-AU", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -494,7 +494,7 @@ export function FilterPanel({
           </button>
         </div>
 
-        <p className="cache-note">Data cached: {formatFetchedAt(fetchedAt)}</p>
+        <p className="cache-note">Data updated: {formatFetchedAt(fetchedAt)}</p>
         <Legend />
       </aside>
 
