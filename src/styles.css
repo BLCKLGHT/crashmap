@@ -129,6 +129,35 @@ button:disabled {
   line-height: 1.1;
 }
 
+.public-viewer__header {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: 14px;
+  z-index: 430;
+  max-width: min(24rem, calc(100vw - 6.5rem));
+  border: 1px solid rgba(20, 34, 28, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 251, 0.9);
+  box-shadow: 0 8px 24px rgba(18, 27, 23, 0.14);
+  color: var(--ink);
+  padding: 0.8rem 0.9rem;
+}
+
+.public-viewer__header h1 {
+  margin: 0.08rem 0 0;
+  font-size: clamp(1rem, 4.3vw, 1.45rem);
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.public-viewer__header p:last-child {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
 .map-mode span {
   color: var(--muted);
   font-size: 0.74rem;

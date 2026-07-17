@@ -34,6 +34,8 @@ type FilterPanelProps = {
   currentWeather: CurrentWeather | null;
   weatherStatus: WeatherState["status"];
   weatherSimulationMode: WeatherSimulationMode;
+  showWeatherControls?: boolean;
+  showDeveloperWeatherSimulation?: boolean;
   onChange: (filters: CrashFilters) => void;
   onTimelineChange: Dispatch<SetStateAction<TimelineState | null>>;
   onTimeOfDayToggle: () => void;
@@ -125,6 +127,8 @@ export function FilterPanel({
   currentWeather,
   weatherStatus,
   weatherSimulationMode,
+  showWeatherControls = true,
+  showDeveloperWeatherSimulation = true,
   onChange,
   onTimelineChange,
   onTimeOfDayToggle,
@@ -344,56 +348,60 @@ export function FilterPanel({
           </section>
         )}
 
-        <div className="filter-group">
-          <span className="filter-label">Weather matching</span>
-          <div className="segmented-control" role="group" aria-label="Weather history filter">
-            <button
-              className={filters.weatherMode === "off" ? "is-active" : ""}
-              type="button"
-              onClick={() => setFilter("weatherMode", "off")}
-            >
-              Off
-            </button>
-            <button
-              className={filters.weatherMode === "current" ? "is-active" : ""}
-              type="button"
-              onClick={() => setFilter("weatherMode", "current")}
-            >
-              Current
-            </button>
-            <button
-              className={filters.weatherMode === "historical" ? "is-active" : ""}
-              type="button"
-              onClick={() => setFilter("weatherMode", "historical")}
-            >
-              Historical beta
-            </button>
+        {showWeatherControls && (
+          <div className="filter-group">
+            <span className="filter-label">Weather matching</span>
+            <div className="segmented-control" role="group" aria-label="Weather history filter">
+              <button
+                className={filters.weatherMode === "off" ? "is-active" : ""}
+                type="button"
+                onClick={() => setFilter("weatherMode", "off")}
+              >
+                Off
+              </button>
+              <button
+                className={filters.weatherMode === "current" ? "is-active" : ""}
+                type="button"
+                onClick={() => setFilter("weatherMode", "current")}
+              >
+                Current
+              </button>
+              <button
+                className={filters.weatherMode === "historical" ? "is-active" : ""}
+                type="button"
+                onClick={() => setFilter("weatherMode", "historical")}
+              >
+                Historical beta
+              </button>
+            </div>
+            <p className="filter-note">
+              Current condition: {formatConditionLabel(currentConditions, weatherStatus)}
+              {weatherStatus === "loading" ? " · updating" : ""}
+              {weatherDetailLabel ? ` · ${weatherDetailLabel}` : ""}
+            </p>
           </div>
-          <p className="filter-note">
-            Current condition: {formatConditionLabel(currentConditions, weatherStatus)}
-            {weatherStatus === "loading" ? " · updating" : ""}
-            {weatherDetailLabel ? ` · ${weatherDetailLabel}` : ""}
-          </p>
-        </div>
+        )}
 
-        <label className="field">
-          <span>Developer weather simulation</span>
-          <select
-            value={weatherSimulationMode}
-            onChange={(event) =>
-              onWeatherSimulationChange(event.target.value as WeatherSimulationMode)
-            }
-          >
-            <option value="live">Live weather</option>
-            <option value="wet">Simulate wet</option>
-            <option value="dry">Simulate dry</option>
-            <option value="daylight">Simulate daylight</option>
-            <option value="dark">Simulate night</option>
-            <option value="failure">Simulate weather failure</option>
-            <option value="historyFailure">Simulate archive failure</option>
-            <option value="historySlow">Simulate slow archive</option>
-          </select>
-        </label>
+        {showDeveloperWeatherSimulation && (
+          <label className="field">
+            <span>Developer weather simulation</span>
+            <select
+              value={weatherSimulationMode}
+              onChange={(event) =>
+                onWeatherSimulationChange(event.target.value as WeatherSimulationMode)
+              }
+            >
+              <option value="live">Live weather</option>
+              <option value="wet">Simulate wet</option>
+              <option value="dry">Simulate dry</option>
+              <option value="daylight">Simulate daylight</option>
+              <option value="dark">Simulate night</option>
+              <option value="failure">Simulate weather failure</option>
+              <option value="historyFailure">Simulate archive failure</option>
+              <option value="historySlow">Simulate slow archive</option>
+            </select>
+          </label>
+        )}
 
         <div className="filter-group">
           <span className="filter-label">Severity</span>
