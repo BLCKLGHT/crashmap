@@ -61,7 +61,7 @@ const MIN_CAMERA_HEADING_DEGREES = 2;
 const MAX_CAMERA_UPDATE_MS = 1000;
 const LOCATION_SMOOTHING = 0.22;
 const SPEED_SMOOTHING = 0.18;
-const HEADING_SMOOTHING = 0.16;
+const HEADING_SMOOTHING = 0.42;
 const STATIONARY_SPEED_KMH = 5;
 const DEFAULT_CENTRE: [number, number] = [146.6, -42.05];
 const SOURCE_ID = "dashboard-warning-road";
@@ -446,19 +446,23 @@ const toFatalFeatureCollection = (
     })),
 });
 
-const applyCamera = (map: MapboxMap, smoothed: SmoothedDriveState): void => {
+const applyCamera = (
+  map: MapboxMap,
+  smoothed: SmoothedDriveState,
+  travelHeading: number,
+): void => {
   const camera = getCameraSettings(smoothed.speedKmh);
   const centreAhead = getPointAhead(
     smoothed.latitude,
     smoothed.longitude,
-    smoothed.heading,
+    travelHeading,
     camera.aheadMetres,
   );
 
   map.stop();
   map.easeTo({
     center: [centreAhead.longitude, centreAhead.latitude],
-    bearing: smoothed.heading,
+    bearing: travelHeading,
     pitch: camera.pitch,
     zoom: camera.zoom,
     duration: 520,
@@ -785,7 +789,9 @@ export function DashboardMapboxMap({
           setIsMapReady(true);
           window.requestAnimationFrame(() => {
             map.resize();
-            if (smoothedRef.current) applyCamera(map, smoothedRef.current);
+            if (smoothedRef.current) {
+              applyCamera(map, smoothedRef.current, smoothedRef.current.heading);
+            }
           });
         });
 
@@ -970,8 +976,11 @@ export function DashboardMapboxMap({
     const movedMetres = last
       ? getDistanceMetres(last.latitude, last.longitude, smoothed.latitude, smoothed.longitude)
       : Number.POSITIVE_INFINITY;
+    const cameraHeading = currentLocation
+      ? normaliseHeading(currentLocation.heading)
+      : smoothed.heading;
     const headingDelta = last
-      ? Math.abs(getHeadingDelta(last.heading, smoothed.heading))
+      ? Math.abs(getHeadingDelta(last.heading, cameraHeading))
       : Number.POSITIVE_INFINITY;
 
     if (
@@ -983,12 +992,12 @@ export function DashboardMapboxMap({
       return;
     }
 
-    applyCamera(map, smoothed);
+    applyCamera(map, smoothed, cameraHeading);
 
     lastCameraRef.current = {
       latitude: smoothed.latitude,
       longitude: smoothed.longitude,
-      heading: smoothed.heading,
+      heading: cameraHeading,
       time: now,
     };
   }, [currentLocation, isActive, isMapReady]);

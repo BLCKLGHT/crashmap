@@ -1488,7 +1488,9 @@ function App() {
             transform: "translate(-50%, -50%)",
             display: "grid",
             placeItems: "center",
-            filter: "drop-shadow(0 1.2rem 1.8rem rgba(0, 0, 0, 0.42))",
+            background: "transparent",
+            mixBlendMode: "normal",
+            isolation: "isolate",
             opacity: 1,
           }}
         >
@@ -1502,6 +1504,9 @@ function App() {
               height: "100%",
               objectFit: "contain",
               objectPosition: "center",
+              opacity: 1,
+              mixBlendMode: "normal",
+              filter: "none",
             }}
           />
         </div>
