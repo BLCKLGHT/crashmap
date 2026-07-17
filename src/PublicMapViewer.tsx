@@ -60,7 +60,7 @@ export function PublicMapViewer() {
   const [filters, setFilters] = useState<CrashFilters>({ ...defaultFilters });
   const [timeline, setTimeline] = useState<TimelineState | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isTimeOfDayEnabled, setIsTimeOfDayEnabled] = useState(true);
+  const [isTimeOfDayEnabled, setIsTimeOfDayEnabled] = useState(false);
   const [viewerMode, setViewerMode] = useState<PublicViewerMode>("map");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -269,6 +269,7 @@ export function PublicMapViewer() {
         weatherSimulationMode="live"
         showWeatherControls={false}
         showDeveloperWeatherSimulation={false}
+        showTimeOfDayControl={false}
         onChange={setFilters}
         onTimelineChange={setTimeline}
         onTimeOfDayToggle={() => setIsTimeOfDayEnabled((enabled) => !enabled)}

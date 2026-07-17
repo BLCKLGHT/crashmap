@@ -36,6 +36,7 @@ type FilterPanelProps = {
   weatherSimulationMode: WeatherSimulationMode;
   showWeatherControls?: boolean;
   showDeveloperWeatherSimulation?: boolean;
+  showTimeOfDayControl?: boolean;
   onChange: (filters: CrashFilters) => void;
   onTimelineChange: Dispatch<SetStateAction<TimelineState | null>>;
   onTimeOfDayToggle: () => void;
@@ -129,6 +130,7 @@ export function FilterPanel({
   weatherSimulationMode,
   showWeatherControls = true,
   showDeveloperWeatherSimulation = true,
+  showTimeOfDayControl = true,
   onChange,
   onTimelineChange,
   onTimeOfDayToggle,
@@ -332,19 +334,21 @@ export function FilterPanel({
               ))}
             </div>
 
-            <button
-              className={`toggle-row ${isTimeOfDayEnabled ? "is-active" : ""}`}
-              type="button"
-              onClick={onTimeOfDayToggle}
-            >
-              {isTimeOfDayEnabled ? (
-                <Moon size={18} aria-hidden="true" />
-              ) : (
-                <Sun size={18} aria-hidden="true" />
-              )}
-              <span>Time-of-day map colour</span>
-              <strong>{isTimeOfDayEnabled ? "On" : "Off"}</strong>
-            </button>
+            {showTimeOfDayControl && (
+              <button
+                className={`toggle-row ${isTimeOfDayEnabled ? "is-active" : ""}`}
+                type="button"
+                onClick={onTimeOfDayToggle}
+              >
+                {isTimeOfDayEnabled ? (
+                  <Moon size={18} aria-hidden="true" />
+                ) : (
+                  <Sun size={18} aria-hidden="true" />
+                )}
+                <span>Time-of-day map colour</span>
+                <strong>{isTimeOfDayEnabled ? "On" : "Off"}</strong>
+              </button>
+            )}
           </section>
         )}
 

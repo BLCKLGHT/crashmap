@@ -1,3 +1,14 @@
+import type { ReactNode } from "react";
+import {
+  AlertTriangle,
+  BarChart3,
+  Clock3,
+  Gauge,
+  Layers,
+  Lightbulb,
+  ShieldAlert,
+  TrendingUp,
+} from "lucide-react";
 import type { CrashRecord } from "../types/crash";
 
 type PublicAnalyticsProps = {
@@ -17,6 +28,18 @@ type CategoryPoint = {
 };
 
 const normalise = (value?: string): string => value?.trim().toLowerCase() ?? "";
+
+const isUnknownLabel = (value?: string): boolean => {
+  const label = normalise(value);
+  return (
+    !label ||
+    label === "unknown" ||
+    label.includes("unknown") ||
+    label === "not supplied" ||
+    label === "not stated" ||
+    label === "unspecified"
+  );
+};
 
 const getCrashTime = (crash: CrashRecord): number | null => {
   if (!crash.dateTime) return null;
@@ -69,12 +92,13 @@ const getHourSeries = (crashes: CrashRecord[]): SeriesPoint[] => {
 const getTopCategories = (
   crashes: CrashRecord[],
   getter: (crash: CrashRecord) => string | undefined,
-  fallback: string,
   limit = 6,
 ): CategoryPoint[] => {
   const counts = new Map<string, number>();
   for (const crash of crashes) {
-    const label = getter(crash)?.trim() || fallback;
+    const rawLabel = getter(crash)?.trim();
+    if (isUnknownLabel(rawLabel)) continue;
+    const label = rawLabel as string;
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
 
@@ -82,6 +106,17 @@ const getTopCategories = (
     .sort(([, a], [, b]) => b - a)
     .slice(0, limit)
     .map(([label, value]) => ({ label, value }));
+};
+
+const formatSpeedZoneLabel = (value?: string): string | undefined => {
+  if (isUnknownLabel(value)) return undefined;
+
+  const rawLabel = value?.trim();
+  const numericMatch = rawLabel?.match(/\d+/);
+  if (!numericMatch) return rawLabel;
+
+  const speed = Number(numericMatch[0]);
+  return Number.isFinite(speed) ? `${speed} km/h` : rawLabel;
 };
 
 const getPeak = (points: SeriesPoint[]): SeriesPoint | null => {
@@ -137,6 +172,10 @@ const LineChart = ({ points, label }: { points: SeriesPoint[]; label: string }) 
 };
 
 const CategoryBars = ({ points }: { points: CategoryPoint[] }) => {
+  if (!points.length) {
+    return <p className="analytics-empty">No labelled records in this selection.</p>;
+  }
+
   const max = Math.max(...points.map((point) => point.value), 1);
 
   return (
@@ -154,6 +193,35 @@ const CategoryBars = ({ points }: { points: CategoryPoint[] }) => {
   );
 };
 
+const PanelHeading = ({
+  icon,
+  label,
+  title,
+  children,
+}: {
+  icon: ReactNode;
+  label: string;
+  title: string;
+  children?: ReactNode;
+}) => (
+  <div className="analytics-panel__heading">
+    <span className="analytics-panel__icon" aria-hidden="true">
+      {icon}
+    </span>
+    <div>
+      <span className="filter-label">{label}</span>
+      <h2>{title}</h2>
+      {children}
+    </div>
+  </div>
+);
+
+const MetricIcon = ({ children }: { children: ReactNode }) => (
+  <span className="analytics-metric-icon" aria-hidden="true">
+    {children}
+  </span>
+);
+
 export function PublicAnalytics({ crashes, totalCrashes }: PublicAnalyticsProps) {
   const fatalCount = crashes.filter(isFatalCrash).length;
   const seriousCount = crashes.filter(isSeriousOnlyCrash).length;
@@ -166,15 +234,12 @@ export function PublicAnalytics({ crashes, totalCrashes }: PublicAnalyticsProps)
     { label: "Fatal", value: fatalCount, tone: "fatal" },
     { label: "Serious", value: seriousCount, tone: "serious" },
     { label: "Property damage", value: propertyCount, tone: "other" },
-    {
-      label: "Other / unspecified",
-      value: Math.max(0, crashes.length - fatalCount - seriousCount - propertyCount),
-      tone: "other",
-    },
   ];
-  const surfacePoints = getTopCategories(crashes, (crash) => crash.surfaceType, "Unknown surface");
-  const lightPoints = getTopCategories(crashes, (crash) => crash.lightCondition, "Unknown light");
-  const speedZonePoints = getTopCategories(crashes, (crash) => crash.speedZone, "Unknown speed zone");
+  const surfacePoints = getTopCategories(crashes, (crash) => crash.surfaceType);
+  const lightPoints = getTopCategories(crashes, (crash) => crash.lightCondition);
+  const speedZonePoints = getTopCategories(crashes, (crash) =>
+    formatSpeedZoneLabel(crash.speedZone),
+  );
   const topSurface = surfacePoints[0];
   const topLight = lightPoints[0];
 
@@ -191,21 +256,33 @@ export function PublicAnalytics({ crashes, totalCrashes }: PublicAnalyticsProps)
 
       <div className="analytics-metrics" aria-label="Summary metrics">
         <article>
+          <MetricIcon>
+            <BarChart3 size={20} />
+          </MetricIcon>
           <span>Shown records</span>
           <strong>{formatNumber(crashes.length)}</strong>
           <em>{getPercent(crashes.length, totalCrashes)} of loaded data</em>
         </article>
         <article>
+          <MetricIcon>
+            <AlertTriangle size={20} />
+          </MetricIcon>
           <span>Fatal records</span>
           <strong>{formatNumber(fatalCount)}</strong>
           <em>{getPercent(fatalCount, crashes.length)} of selected records</em>
         </article>
         <article>
+          <MetricIcon>
+            <ShieldAlert size={20} />
+          </MetricIcon>
           <span>Serious records</span>
           <strong>{formatNumber(seriousCount)}</strong>
           <em>{getPercent(seriousCount, crashes.length)} of selected records</em>
         </article>
         <article>
+          <MetricIcon>
+            <Layers size={20} />
+          </MetricIcon>
           <span>Property damage</span>
           <strong>{formatNumber(propertyCount)}</strong>
           <em>{getPercent(propertyCount, crashes.length)} of selected records</em>
@@ -214,74 +291,65 @@ export function PublicAnalytics({ crashes, totalCrashes }: PublicAnalyticsProps)
 
       <div className="analytics-grid">
         <article className="analytics-panel analytics-panel--wide">
-          <div>
-            <span className="filter-label">Time series</span>
-            <h2>Crashes by year</h2>
+          <PanelHeading icon={<TrendingUp size={20} />} label="Time series" title="Crashes by year">
             <p>
               {peakYear
                 ? `${peakYear.label} has the highest selected count with ${formatNumber(peakYear.value)} records.`
                 : "No dated records are available for this selection."}
             </p>
-          </div>
+          </PanelHeading>
           <LineChart points={yearSeries} label="Crashes by year" />
         </article>
 
         <article className="analytics-panel">
-          <div>
-            <span className="filter-label">Severity</span>
-            <h2>Outcome mix</h2>
-          </div>
+          <PanelHeading icon={<ShieldAlert size={20} />} label="Severity" title="Outcome mix" />
           <CategoryBars points={severityPoints} />
         </article>
 
         <article className="analytics-panel">
-          <div>
-            <span className="filter-label">Time of day</span>
-            <h2>Crash records by hour</h2>
+          <PanelHeading icon={<Clock3 size={20} />} label="Time of day" title="Records by hour">
             <p>
               {peakHour
                 ? `The busiest selected hour starts at ${peakHour.label}:00.`
                 : "No hourly pattern is available."}
             </p>
-          </div>
+          </PanelHeading>
           <BarChart points={hourSeries} label="Crashes by hour of day" />
         </article>
 
         <article className="analytics-panel">
-          <div>
-            <span className="filter-label">Road surface</span>
-            <h2>Surface conditions</h2>
+          <PanelHeading icon={<Layers size={20} />} label="Road surface" title="Surface conditions">
             <p>
               {topSurface
                 ? `${topSurface.label} appears most often in the selected records.`
                 : "No surface data is available."}
             </p>
-          </div>
+          </PanelHeading>
           <CategoryBars points={surfacePoints} />
         </article>
 
         <article className="analytics-panel">
-          <div>
-            <span className="filter-label">Light</span>
-            <h2>Lighting conditions</h2>
+          <PanelHeading icon={<Lightbulb size={20} />} label="Light" title="Lighting conditions">
             <p>
               {topLight
                 ? `${topLight.label} is the most common selected light condition.`
                 : "No light data is available."}
             </p>
-          </div>
+          </PanelHeading>
           <CategoryBars points={lightPoints} />
         </article>
 
         <article className="analytics-panel analytics-panel--wide">
-          <div>
-            <span className="filter-label">Speed zones</span>
-            <h2>Where records cluster by posted speed</h2>
+          <PanelHeading
+            icon={<Gauge size={20} />}
+            label="Speed limits"
+            title="Records by posted speed limit"
+          >
             <p>
               This does not mean a speed zone is automatically unsafe. It shows where
               historical records are concentrated in the selected data.
             </p>
-          </div>
+          </PanelHeading>
           <CategoryBars points={speedZonePoints} />
         </article>
       </div>
