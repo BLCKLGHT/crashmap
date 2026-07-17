@@ -20,6 +20,10 @@ type ArcGisFeature = {
 
 type ArcGisGeoJson = {
   features?: ArcGisFeature[];
+  error?: {
+    message?: string;
+    details?: string[];
+  };
 };
 
 type CachedCrashPayload = {
@@ -111,7 +115,7 @@ const buildQueryUrl = (resultOffset: number): string => {
   const params = new URLSearchParams({
     where: "1=1",
     outFields:
-      "ID,VCRN,DESCRIPTION,CRASH_DATE_TIME,SEVERITY,SPEED_ZONE,SURFACE_TYPE,LIGHT_CONDITION,WEATHER_CONDITION,LOCATION_DESCRIPTION",
+      "ID,VCRN,DESCRIPTION,CRASH_DATE_TIME,SEVERITY,SPEED_ZONE,SURFACE_TYPE,LIGHT_CONDITION,LOCATION_DESCRIPTION",
     returnGeometry: "true",
     outSR: "4326",
     f: "geojson",
@@ -131,7 +135,12 @@ const fetchCrashPage = async (resultOffset: number): Promise<ArcGisFeature[]> =>
 
   const data = (await response.json()) as ArcGisGeoJson;
   if (!Array.isArray(data.features)) {
-    throw new Error("Crash data response did not include a feature collection.");
+    const serviceMessage = [data.error?.message, ...(data.error?.details ?? [])]
+      .filter(Boolean)
+      .join(" ");
+    throw new Error(
+      serviceMessage || "Crash data response did not include a feature collection.",
+    );
   }
   return data.features ?? [];
 };

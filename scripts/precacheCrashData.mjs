@@ -51,7 +51,7 @@ const buildQueryUrl = (resultOffset) => {
   const params = new URLSearchParams({
     where: "1=1",
     outFields:
-      "ID,VCRN,DESCRIPTION,CRASH_DATE_TIME,SEVERITY,SPEED_ZONE,SURFACE_TYPE,LIGHT_CONDITION,WEATHER_CONDITION,LOCATION_DESCRIPTION",
+      "ID,VCRN,DESCRIPTION,CRASH_DATE_TIME,SEVERITY,SPEED_ZONE,SURFACE_TYPE,LIGHT_CONDITION,LOCATION_DESCRIPTION",
     returnGeometry: "true",
     outSR: "4326",
     f: "geojson",
@@ -71,7 +71,12 @@ const fetchCrashPage = async (resultOffset) => {
 
   const data = await response.json();
   if (!Array.isArray(data.features)) {
-    throw new Error("Crash data response did not include a feature collection.");
+    const serviceMessage = [data.error?.message, ...(data.error?.details ?? [])]
+      .filter(Boolean)
+      .join(" ");
+    throw new Error(
+      serviceMessage || "Crash data response did not include a feature collection.",
+    );
   }
 
   return data.features;
