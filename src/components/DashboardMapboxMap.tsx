@@ -67,9 +67,9 @@ const DEFAULT_CENTRE: [number, number] = [146.6, -42.05];
 const SOURCE_ID = "dashboard-warning-road";
 const GLOW_LAYER_ID = "dashboard-warning-road-glow";
 const CORE_LAYER_ID = "dashboard-warning-road-core";
-const FATAL_SOURCE_ID = "dashboard-fatal-crashes";
-const FATAL_GLOW_LAYER_ID = "dashboard-fatal-crashes-glow";
-const FATAL_CORE_LAYER_ID = "dashboard-fatal-crashes-core";
+const PRIORITY_CRASH_SOURCE_ID = "dashboard-priority-crashes";
+const PRIORITY_CRASH_HALO_LAYER_ID = "dashboard-priority-crashes-halo";
+const PRIORITY_CRASH_CORE_LAYER_ID = "dashboard-priority-crashes-core";
 const MAP_MATCH_MIN_INTERVAL_MS = 4500;
 const MAP_MATCH_MIN_TRACE_POINTS = 4;
 const MAX_TRACE_POINTS = 10;
@@ -427,17 +427,33 @@ const createEmptyFeatureCollection = (): WarningFeatureCollection => ({
 const isFatalCrashRecord = (crash: CrashRecord): boolean =>
   (crash.severity ?? "").toLowerCase().includes("fatal");
 
-const toFatalFeatureCollection = (
+const isSeriousCrashRecord = (crash: CrashRecord): boolean => {
+  const severity = crash.severity?.toLowerCase() ?? "";
+  return severity.includes("fatal") || severity.includes("serious");
+};
+
+const getPrioritySeverityRank = (crash: CrashRecord): number => {
+  if (isFatalCrashRecord(crash)) return 3;
+  if (isSeriousCrashRecord(crash)) return 2;
+  return 0;
+};
+
+const toPriorityCrashFeatureCollection = (
   crashes: CrashRecord[],
 ): GeoJSON.FeatureCollection<GeoJSON.Point> => ({
   type: "FeatureCollection",
   features: crashes
-    .filter(isFatalCrashRecord)
     .map((crash) => ({
+      crash,
+      severityRank: getPrioritySeverityRank(crash),
+    }))
+    .filter(({ severityRank }) => severityRank >= 2)
+    .map(({ crash, severityRank }) => ({
       type: "Feature",
       properties: {
         id: crash.id,
-        severity: crash.severity ?? "Fatal",
+        severity: crash.severity ?? "Crash record",
+        severityRank,
       },
       geometry: {
         type: "Point",
@@ -568,7 +584,7 @@ export function DashboardMapboxMap({
   } | null>(null);
   const sourceUpdatesRef = useRef(0);
   const warningSegmentsRef = useRef<WarningRoadSegment[]>([]);
-  const fatalCrashesRef = useRef<CrashRecord[]>([]);
+  const priorityCrashesRef = useRef<CrashRecord[]>([]);
   const [status, setStatus] = useState(token ? "loading" : "checking-token");
   const [isMapReady, setIsMapReady] = useState(false);
   const [routeAheadGeometry, setRouteAheadGeometry] = useState<GeoJSON.LineString | null>(null);
@@ -586,7 +602,7 @@ export function DashboardMapboxMap({
     [currentLocation, drivingState, routeAheadGeometry],
   );
   warningSegmentsRef.current = warningSegments;
-  fatalCrashesRef.current = nearbyCrashes;
+  priorityCrashesRef.current = nearbyCrashes;
 
   useEffect(() => {
     if (buildTimeToken || runtimeToken) return;
@@ -657,9 +673,9 @@ export function DashboardMapboxMap({
             data: toFeatureCollection(warningSegmentsRef.current),
             lineMetrics: true,
           });
-          map.addSource(FATAL_SOURCE_ID, {
+          map.addSource(PRIORITY_CRASH_SOURCE_ID, {
             type: "geojson",
-            data: toFatalFeatureCollection(fatalCrashesRef.current),
+            data: toPriorityCrashFeatureCollection(priorityCrashesRef.current),
           });
           map.addLayer({
             id: GLOW_LAYER_ID,
@@ -747,41 +763,73 @@ export function DashboardMapboxMap({
             },
           });
           map.addLayer({
-            id: FATAL_GLOW_LAYER_ID,
+            id: PRIORITY_CRASH_HALO_LAYER_ID,
             type: "circle",
-            source: FATAL_SOURCE_ID,
+            source: PRIORITY_CRASH_SOURCE_ID,
             paint: {
               "circle-radius": [
                 "interpolate",
                 ["linear"],
                 ["zoom"],
                 14,
-                10,
+                ["match", ["get", "severityRank"], 3, 17, 2, 13, 10],
                 18,
-                22,
+                ["match", ["get", "severityRank"], 3, 34, 2, 24, 18],
               ],
-              "circle-color": "#ef4444",
-              "circle-opacity": 0.26,
-              "circle-blur": 0.45,
+              "circle-color": [
+                "match",
+                ["get", "severityRank"],
+                3,
+                "#ef4444",
+                2,
+                "#f97316",
+                "#f97316",
+              ],
+              "circle-opacity": [
+                "match",
+                ["get", "severityRank"],
+                3,
+                0.42,
+                2,
+                0.34,
+                0.26,
+              ],
+              "circle-blur": 0.52,
             },
           });
           map.addLayer({
-            id: FATAL_CORE_LAYER_ID,
+            id: PRIORITY_CRASH_CORE_LAYER_ID,
             type: "circle",
-            source: FATAL_SOURCE_ID,
+            source: PRIORITY_CRASH_SOURCE_ID,
             paint: {
               "circle-radius": [
                 "interpolate",
                 ["linear"],
                 ["zoom"],
                 14,
-                4,
+                ["match", ["get", "severityRank"], 3, 7, 2, 5.5, 4],
                 18,
-                8,
+                ["match", ["get", "severityRank"], 3, 13, 2, 9, 7],
               ],
-              "circle-color": "#ef4444",
+              "circle-color": [
+                "match",
+                ["get", "severityRank"],
+                3,
+                "#dc2626",
+                2,
+                "#f59e0b",
+                "#f59e0b",
+              ],
               "circle-stroke-color": "rgba(255, 255, 255, 0.92)",
-              "circle-stroke-width": 1.8,
+              "circle-stroke-width": [
+                "match",
+                ["get", "severityRank"],
+                3,
+                2.6,
+                2,
+                2,
+                1.8,
+              ],
               "circle-opacity": 0.96,
             },
           });
@@ -827,10 +875,10 @@ export function DashboardMapboxMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapReady || !map.isStyleLoaded()) return;
-    const source = map.getSource(FATAL_SOURCE_ID) as GeoJSONSource | undefined;
+    const source = map.getSource(PRIORITY_CRASH_SOURCE_ID) as GeoJSONSource | undefined;
     if (!source) return;
 
-    source.setData(toFatalFeatureCollection(nearbyCrashes));
+    source.setData(toPriorityCrashFeatureCollection(nearbyCrashes));
   }, [isMapReady, nearbyCrashes]);
 
   useEffect(() => {
