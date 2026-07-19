@@ -57,12 +57,14 @@ const DRIVE_CAMERA_PITCH = 60;
 const DRIVE_CAMERA_ZOOM = 16.5;
 const VEHICLE_SCREEN_Y_RATIO = 0.74;
 const MIN_CAMERA_MOVE_METRES = 3;
-const MIN_CAMERA_HEADING_DEGREES = 2;
-const MAX_CAMERA_UPDATE_MS = 1000;
 const LOCATION_SMOOTHING = 0.22;
 const SPEED_SMOOTHING = 0.18;
 const HEADING_SMOOTHING = 0.42;
+const FRAME_LOCATION_SMOOTHING_MS = 720;
+const FRAME_HEADING_SMOOTHING_MS = 520;
+const FRAME_SPEED_SMOOTHING_MS = 900;
 const STATIONARY_SPEED_KMH = 5;
+const WARNING_SEGMENT_LENGTH_METRES = 220;
 const DEFAULT_CENTRE: [number, number] = [146.6, -42.05];
 const SOURCE_ID = "dashboard-warning-road";
 const GLOW_LAYER_ID = "dashboard-warning-road-glow";
@@ -383,7 +385,7 @@ const buildFallbackSegments = (
     warningDistance <= lookaheadDistance
   ) {
     const startDistance = Math.max(0, warningDistance);
-    const endDistance = Math.min(lookaheadDistance, startDistance + 260);
+    const endDistance = Math.min(lookaheadDistance, startDistance + WARNING_SEGMENT_LENGTH_METRES);
     const warningGeometry = routeGeometry
       ? sliceLineByDistance(routeGeometry, startDistance, Math.min(endDistance, routeDistance))
       : null;
@@ -475,15 +477,11 @@ const applyCamera = (
     camera.aheadMetres,
   );
 
-  map.stop();
-  map.easeTo({
+  map.jumpTo({
     center: [centreAhead.longitude, centreAhead.latitude],
     bearing: travelHeading,
     pitch: camera.pitch,
     zoom: camera.zoom,
-    duration: 520,
-    easing: (time) => 1 - (1 - time) ** 3,
-    essential: true,
   });
 };
 
@@ -567,12 +565,9 @@ export function DashboardMapboxMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapboxMap | null>(null);
   const smoothedRef = useRef<SmoothedDriveState | null>(null);
-  const lastCameraRef = useRef<{
-    latitude: number;
-    longitude: number;
-    heading: number;
-    time: number;
-  } | null>(null);
+  const targetRef = useRef<SmoothedDriveState | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const lastAnimationTimeRef = useRef<number | null>(null);
   const traceRef = useRef<TracePoint[]>([]);
   const lastMatchRef = useRef<{ time: number; status: string }>({ time: 0, status: "idle" });
   const lastRouteRef = useRef<{
@@ -977,78 +972,91 @@ export function DashboardMapboxMap({
   useEffect(() => {
     if (!currentLocation) return;
 
-    const previous = smoothedRef.current;
-    if (!previous) {
+    const previousTarget = targetRef.current ?? smoothedRef.current;
+    if (!previousTarget) {
+      targetRef.current = currentLocation;
       smoothedRef.current = currentLocation;
       return;
     }
 
     const movedMetres = getDistanceMetres(
-      previous.latitude,
-      previous.longitude,
+      previousTarget.latitude,
+      previousTarget.longitude,
       currentLocation.latitude,
       currentLocation.longitude,
     );
     const inferredHeading =
       movedMetres >= MIN_CAMERA_MOVE_METRES
         ? getBearingDegrees(
-            previous.latitude,
-            previous.longitude,
+            previousTarget.latitude,
+            previousTarget.longitude,
             currentLocation.latitude,
             currentLocation.longitude,
           )
-        : previous.heading;
+        : previousTarget.heading;
     const rawHeading =
       currentLocation.speedKmh >= STATIONARY_SPEED_KMH
         ? currentLocation.heading || inferredHeading
-        : previous.heading;
+        : previousTarget.heading;
 
-    smoothedRef.current = {
+    targetRef.current = {
       latitude:
-        previous.latitude + (currentLocation.latitude - previous.latitude) * LOCATION_SMOOTHING,
+        previousTarget.latitude +
+        (currentLocation.latitude - previousTarget.latitude) * LOCATION_SMOOTHING,
       longitude:
-        previous.longitude + (currentLocation.longitude - previous.longitude) * LOCATION_SMOOTHING,
-      heading: smoothHeading(previous.heading, rawHeading, HEADING_SMOOTHING),
-      speedKmh: previous.speedKmh + (currentLocation.speedKmh - previous.speedKmh) * SPEED_SMOOTHING,
+        previousTarget.longitude +
+        (currentLocation.longitude - previousTarget.longitude) * LOCATION_SMOOTHING,
+      heading: smoothHeading(previousTarget.heading, rawHeading, HEADING_SMOOTHING),
+      speedKmh:
+        previousTarget.speedKmh +
+        (currentLocation.speedKmh - previousTarget.speedKmh) * SPEED_SMOOTHING,
       timestamp: currentLocation.timestamp,
     };
   }, [currentLocation]);
 
   useEffect(() => {
     const map = mapRef.current;
-    const smoothed = smoothedRef.current;
-    if (!map || !isMapReady || !isActive || !smoothed) return;
+    if (!map || !isMapReady || !isActive) return;
 
-    const now = Date.now();
-    const last = lastCameraRef.current;
-    const movedMetres = last
-      ? getDistanceMetres(last.latitude, last.longitude, smoothed.latitude, smoothed.longitude)
-      : Number.POSITIVE_INFINITY;
-    const cameraHeading = currentLocation
-      ? normaliseHeading(currentLocation.heading)
-      : smoothed.heading;
-    const headingDelta = last
-      ? Math.abs(getHeadingDelta(last.heading, cameraHeading))
-      : Number.POSITIVE_INFINITY;
+    const animate = (time: number) => {
+      const target = targetRef.current;
+      const current = smoothedRef.current;
+      if (!target || !current) {
+        animationFrameRef.current = window.requestAnimationFrame(animate);
+        return;
+      }
 
-    if (
-      last &&
-      movedMetres < MIN_CAMERA_MOVE_METRES &&
-      headingDelta < MIN_CAMERA_HEADING_DEGREES &&
-      now - last.time < MAX_CAMERA_UPDATE_MS
-    ) {
-      return;
-    }
+      const previousTime = lastAnimationTimeRef.current ?? time;
+      const deltaMs = Math.min(64, Math.max(0, time - previousTime));
+      lastAnimationTimeRef.current = time;
+      const locationAmount = 1 - Math.exp(-deltaMs / FRAME_LOCATION_SMOOTHING_MS);
+      const headingAmount = 1 - Math.exp(-deltaMs / FRAME_HEADING_SMOOTHING_MS);
+      const speedAmount = 1 - Math.exp(-deltaMs / FRAME_SPEED_SMOOTHING_MS);
 
-    applyCamera(map, smoothed, cameraHeading);
+      const next: SmoothedDriveState = {
+        latitude: current.latitude + (target.latitude - current.latitude) * locationAmount,
+        longitude: current.longitude + (target.longitude - current.longitude) * locationAmount,
+        heading: smoothHeading(current.heading, target.heading, headingAmount),
+        speedKmh: current.speedKmh + (target.speedKmh - current.speedKmh) * speedAmount,
+        timestamp: target.timestamp,
+      };
+      smoothedRef.current = next;
+      applyCamera(map, next, next.heading);
 
-    lastCameraRef.current = {
-      latitude: smoothed.latitude,
-      longitude: smoothed.longitude,
-      heading: cameraHeading,
-      time: now,
+      animationFrameRef.current = window.requestAnimationFrame(animate);
     };
-  }, [currentLocation, isActive, isMapReady]);
+
+    lastAnimationTimeRef.current = null;
+    animationFrameRef.current = window.requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      lastAnimationTimeRef.current = null;
+    };
+  }, [isActive, isMapReady]);
 
   useEffect(() => {
     if (!token || !currentLocation || !isActive) return;
@@ -1088,10 +1096,10 @@ export function DashboardMapboxMap({
         const matchedLine = payload.matchings?.[0]?.geometry;
         if (!matchedLine?.coordinates.length) return;
         const latest = matchedLine.coordinates[matchedLine.coordinates.length - 1];
-        const current = smoothedRef.current;
-        if (current) {
-          smoothedRef.current = {
-            ...current,
+        const currentTarget = targetRef.current;
+        if (currentTarget) {
+          targetRef.current = {
+            ...currentTarget,
             longitude: latest[0],
             latitude: latest[1],
           };
