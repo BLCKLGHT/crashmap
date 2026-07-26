@@ -47,8 +47,8 @@ export const getSegmentParticleCount = (segment: TrafficSegment, zoom: number): 
     getZoomDensityMultiplier(zoom) *
     getRoadClassMultiplier(segment.roadClass);
 
-  if (count < 0.45) return 0;
-  return Math.max(1, Math.floor(count));
+  if (count <= 0) return 0;
+  return Math.max(1, Math.round(count));
 };
 
 const allocateParticleCounts = (

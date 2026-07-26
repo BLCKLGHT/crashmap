@@ -24,27 +24,27 @@ type MapboxTrafficFeature = {
 
 const createTrafficParticleImage = (
   color: string,
-  leadColor = "rgba(255,255,255,0.96)",
+  leadColor = "rgba(255,255,255,1)",
 ): ImageData | null => {
   const canvas = document.createElement("canvas");
-  canvas.width = 56;
-  canvas.height = 14;
+  canvas.width = 72;
+  canvas.height = 18;
   const context = canvas.getContext("2d");
   if (!context) return null;
 
   context.clearRect(0, 0, canvas.width, canvas.height);
   const gradient = context.createLinearGradient(0, 0, canvas.width, 0);
   gradient.addColorStop(0, "rgba(255,255,255,0)");
-  gradient.addColorStop(0.28, color.replace("1)", "0.15)"));
-  gradient.addColorStop(0.72, color);
+  gradient.addColorStop(0.18, color.replace("1)", "0.18)"));
+  gradient.addColorStop(0.72, color.replace("1)", "0.88)"));
   gradient.addColorStop(1, leadColor);
 
   context.fillStyle = gradient;
   context.beginPath();
-  context.moveTo(4, 7);
-  context.quadraticCurveTo(19, 0.5, 45, 2.4);
-  context.quadraticCurveTo(55, 7, 45, 11.6);
-  context.quadraticCurveTo(19, 13.5, 4, 7);
+  context.moveTo(4, 9);
+  context.quadraticCurveTo(23, 1.5, 58, 3.2);
+  context.quadraticCurveTo(71, 9, 58, 14.8);
+  context.quadraticCurveTo(23, 16.5, 4, 9);
   context.closePath();
   context.fill();
 
@@ -121,6 +121,7 @@ export class TrafficFlowLayer {
       TRAFFIC_FLOW_CONFIG.trafficLoaderLayerId,
       visibility.trafficFlow,
     );
+    safeSetLayerVisibility(this.map, TRAFFIC_FLOW_CONFIG.glowLayerId, visibility.trafficFlow);
     safeSetLayerVisibility(this.map, TRAFFIC_FLOW_CONFIG.layerId, visibility.trafficFlow);
 
     if (visibility.trafficFlow) {
@@ -236,8 +237,8 @@ export class TrafficFlowLayer {
             visibility: "none",
           },
           paint: {
-            "line-color": "rgba(0, 0, 0, 0)",
-            "line-opacity": 0.001,
+            "line-color": "rgba(0, 0, 0, 0.01)",
+            "line-opacity": 0.01,
             "line-width": ["interpolate", ["linear"], ["zoom"], 8, 8, 14, 14, 17, 22],
           },
         },
@@ -253,6 +254,42 @@ export class TrafficFlowLayer {
     }
 
     addParticleImages(this.map);
+
+    if (!this.map.getLayer(TRAFFIC_FLOW_CONFIG.glowLayerId)) {
+      this.map.addLayer(
+        {
+          id: TRAFFIC_FLOW_CONFIG.glowLayerId,
+          type: "circle",
+          source: TRAFFIC_FLOW_CONFIG.sourceId,
+          layout: {
+            visibility: "none",
+          },
+          paint: {
+            "circle-radius": [
+              "*",
+              ["get", "scale"],
+              ["interpolate", ["linear"], ["zoom"], 8.8, 1.4, 12, 2.4, 15, 3.6],
+            ],
+            "circle-color": [
+              "match",
+              ["get", "icon"],
+              "traffic-flow-low",
+              "#bae6fd",
+              "traffic-flow-moderate",
+              "#99f6e4",
+              "traffic-flow-heavy",
+              "#fde68a",
+              "traffic-flow-severe",
+              "#fecaca",
+              "#bae6fd",
+            ],
+            "circle-opacity": ["*", ["get", "opacity"], 0.62],
+            "circle-blur": 0.85,
+          },
+        },
+        getExistingBeforeLayerId(this.map, this.beforeParticleLayerId),
+      );
+    }
 
     if (!this.map.getLayer(TRAFFIC_FLOW_CONFIG.layerId)) {
       this.map.addLayer(
@@ -270,7 +307,7 @@ export class TrafficFlowLayer {
             "icon-size": [
               "*",
               ["get", "scale"],
-              ["interpolate", ["linear"], ["zoom"], 8.8, 0.26, 10, 0.36, 12, 0.5, 14, 0.76, 17, 1],
+              ["interpolate", ["linear"], ["zoom"], 8.8, 0.42, 10, 0.52, 12, 0.68, 14, 0.92, 17, 1.18],
             ],
             visibility: "none",
           },

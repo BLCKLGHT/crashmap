@@ -98,7 +98,7 @@ describe("traffic geometry interpolation", () => {
         },
       },
       {
-        id: "short",
+        id: "too-short",
         properties: { congestion: "low" },
         geometry: {
           type: "LineString",

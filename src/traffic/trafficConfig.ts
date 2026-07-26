@@ -36,6 +36,7 @@ export type TrafficParticleFrame = GeoJSON.FeatureCollection<
 
 export const TRAFFIC_FLOW_CONFIG = {
   sourceId: "viewer-traffic-flow-particles",
+  glowLayerId: "viewer-traffic-flow-particle-glow",
   layerId: "viewer-traffic-flow-particles",
   trafficSourceId: "viewer-mapbox-traffic",
   trafficSourceLayer: "traffic",
@@ -43,32 +44,32 @@ export const TRAFFIC_FLOW_CONFIG = {
   trafficConditionsLayerId: "viewer-traffic-conditions",
   minParticleZoom: 8.8,
   maxVisibleParticles: 220,
-  minimumSegmentLengthMetres: 45,
+  minimumSegmentLengthMetres: 8,
   lateralOffsetMetres: 1,
   stableSalt: "tasmania-crash-map-traffic-flow-v1",
   congestion: {
     low: {
       baseSpeedMetresPerSecond: 38,
-      particlesPerKilometre: 4,
-      opacity: 0.42,
+      particlesPerKilometre: 12,
+      opacity: 0.58,
       icon: "traffic-flow-low",
     },
     moderate: {
       baseSpeedMetresPerSecond: 22,
-      particlesPerKilometre: 7,
-      opacity: 0.55,
+      particlesPerKilometre: 18,
+      opacity: 0.72,
       icon: "traffic-flow-moderate",
     },
     heavy: {
       baseSpeedMetresPerSecond: 10,
-      particlesPerKilometre: 11,
-      opacity: 0.7,
+      particlesPerKilometre: 24,
+      opacity: 0.82,
       icon: "traffic-flow-heavy",
     },
     severe: {
       baseSpeedMetresPerSecond: 4.4,
-      particlesPerKilometre: 15,
-      opacity: 0.82,
+      particlesPerKilometre: 30,
+      opacity: 0.92,
       icon: "traffic-flow-severe",
     },
     closed: {
