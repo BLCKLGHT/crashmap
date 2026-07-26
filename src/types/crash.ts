@@ -60,6 +60,13 @@ export type CrashFilters = {
   weatherMode: WeatherMatchSetting;
 };
 
+export type ViewerLayerToggles = {
+  crashMarkers: boolean;
+  heatmap: boolean;
+  trafficConditions: boolean;
+  trafficFlow: boolean;
+};
+
 export type HistoricalCrashWeather = {
   crashId: string;
   dateTime?: string;

@@ -1,11 +1,23 @@
 import type { Dispatch, SetStateAction } from "react";
-import { Moon, Pause, Play, RefreshCw, SlidersHorizontal, Sun, X } from "lucide-react";
+import {
+  Activity,
+  Info,
+  Layers,
+  Moon,
+  Pause,
+  Play,
+  RefreshCw,
+  SlidersHorizontal,
+  Sun,
+  X,
+} from "lucide-react";
 import type {
   CrashFilters,
   CrashRecord,
   CurrentDrivingConditions,
   CurrentWeather,
   TimelineState,
+  ViewerLayerToggles,
   WeatherState,
 } from "../types/crash";
 import { defaultFilters, uniqueOptions } from "../data/filterCrashes";
@@ -37,10 +49,13 @@ type FilterPanelProps = {
   showWeatherControls?: boolean;
   showDeveloperWeatherSimulation?: boolean;
   showTimeOfDayControl?: boolean;
+  showViewerLayerControls?: boolean;
+  viewerLayers?: ViewerLayerToggles;
   onChange: (filters: CrashFilters) => void;
   onTimelineChange: Dispatch<SetStateAction<TimelineState | null>>;
   onTimeOfDayToggle: () => void;
   onWeatherSimulationChange: (mode: WeatherSimulationMode) => void;
+  onViewerLayerChange?: (layers: ViewerLayerToggles) => void;
   onRefresh: () => void;
   onOpen: () => void;
   onClose: () => void;
@@ -131,10 +146,13 @@ export function FilterPanel({
   showWeatherControls = true,
   showDeveloperWeatherSimulation = true,
   showTimeOfDayControl = true,
+  showViewerLayerControls = false,
+  viewerLayers,
   onChange,
   onTimelineChange,
   onTimeOfDayToggle,
   onWeatherSimulationChange,
+  onViewerLayerChange,
   onRefresh,
   onOpen,
   onClose,
@@ -153,6 +171,11 @@ export function FilterPanel({
     value: CrashFilters[Key],
   ) => {
     onChange({ ...filters, [key]: value });
+  };
+
+  const setViewerLayer = (key: keyof ViewerLayerToggles, value: boolean) => {
+    if (!viewerLayers || !onViewerLayerChange) return;
+    onViewerLayerChange({ ...viewerLayers, [key]: value });
   };
 
   const setTimelineRangeStart = (value: number) => {
@@ -259,6 +282,68 @@ export function FilterPanel({
           <strong>{filteredCount.toLocaleString("en-AU")}</strong>
           <span>of {crashes.length.toLocaleString("en-AU")} crashes shown</span>
         </div>
+
+        {showViewerLayerControls && viewerLayers && (
+          <section className="viewer-layer-controls" aria-label="Viewer map layers">
+            <div className="viewer-layer-controls__header">
+              <span className="filter-label">Viewer layers</span>
+              <span
+                className="viewer-layer-tooltip"
+                title="Indicative traffic flow based on current road congestion. Particles do not represent tracked vehicles."
+                aria-label="Indicative traffic flow based on current road congestion. Particles do not represent tracked vehicles."
+              >
+                <Info size={15} aria-hidden="true" />
+              </span>
+            </div>
+            <div className="viewer-layer-grid">
+              <button
+                className={`viewer-layer-toggle ${viewerLayers.crashMarkers ? "is-active" : ""}`}
+                type="button"
+                aria-pressed={viewerLayers.crashMarkers}
+                onClick={() => setViewerLayer("crashMarkers", !viewerLayers.crashMarkers)}
+              >
+                <Layers size={16} aria-hidden="true" />
+                <span>Crash markers</span>
+              </button>
+              <button
+                className={`viewer-layer-toggle ${viewerLayers.heatmap ? "is-active" : ""}`}
+                type="button"
+                aria-pressed={viewerLayers.heatmap}
+                onClick={() => setViewerLayer("heatmap", !viewerLayers.heatmap)}
+              >
+                <Activity size={16} aria-hidden="true" />
+                <span>Heatmap</span>
+              </button>
+              <button
+                className={`viewer-layer-toggle ${
+                  viewerLayers.trafficConditions ? "is-active" : ""
+                }`}
+                type="button"
+                aria-pressed={viewerLayers.trafficConditions}
+                onClick={() =>
+                  setViewerLayer("trafficConditions", !viewerLayers.trafficConditions)
+                }
+              >
+                <Layers size={16} aria-hidden="true" />
+                <span>Traffic conditions</span>
+              </button>
+              <button
+                className={`viewer-layer-toggle ${
+                  viewerLayers.trafficFlow ? "is-active" : ""
+                }`}
+                type="button"
+                aria-pressed={viewerLayers.trafficFlow}
+                onClick={() => setViewerLayer("trafficFlow", !viewerLayers.trafficFlow)}
+              >
+                <Activity size={16} aria-hidden="true" />
+                <span>Traffic Flow</span>
+              </button>
+            </div>
+            <p className="filter-note viewer-layer-note">
+              Traffic Flow animates only visible roads and stops when hidden.
+            </p>
+          </section>
+        )}
 
         {timeline && (
           <section className="timeline-panel" aria-label="Crash timeline controls">
