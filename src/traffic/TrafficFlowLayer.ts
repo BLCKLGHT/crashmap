@@ -114,9 +114,15 @@ export class TrafficFlowLayer {
       TRAFFIC_FLOW_CONFIG.trafficConditionsLayerId,
       visibility.trafficConditions,
     );
+    safeSetLayerVisibility(
+      this.map,
+      TRAFFIC_FLOW_CONFIG.trafficLoaderLayerId,
+      visibility.trafficFlow,
+    );
     safeSetLayerVisibility(this.map, TRAFFIC_FLOW_CONFIG.layerId, visibility.trafficFlow);
 
     if (visibility.trafficFlow) {
+      this.lastRebuildKey = "";
       this.rebuildParticles();
       this.start();
     } else {
@@ -150,6 +156,14 @@ export class TrafficFlowLayer {
           type: "line",
           source: TRAFFIC_FLOW_CONFIG.trafficSourceId,
           "source-layer": TRAFFIC_FLOW_CONFIG.trafficSourceLayer,
+          filter: [
+            "any",
+            ["has", "congestion"],
+            ["==", ["get", "closed"], true],
+            ["==", ["get", "closed"], "true"],
+            ["==", ["get", "closed"], "yes"],
+            ["==", ["get", "closed"], 1],
+          ],
           layout: {
             "line-cap": "round",
             "line-join": "round",
@@ -157,22 +171,59 @@ export class TrafficFlowLayer {
           },
           paint: {
             "line-color": [
-              "match",
-              ["get", "congestion"],
-              "low",
-              "#38bdf8",
-              "moderate",
-              "#2dd4bf",
-              "heavy",
-              "#f59e0b",
-              "severe",
-              "#ef4444",
-              "closed",
+              "case",
+              [
+                "any",
+                ["==", ["get", "closed"], true],
+                ["==", ["get", "closed"], "true"],
+                ["==", ["get", "closed"], "yes"],
+                ["==", ["get", "closed"], 1],
+              ],
               "#64748b",
-              "#38bdf8",
+              [
+                "match",
+                ["get", "congestion"],
+                "low",
+                "#22c55e",
+                "moderate",
+                "#facc15",
+                "heavy",
+                "#f97316",
+                "severe",
+                "#ef4444",
+                "#22c55e",
+              ],
             ],
             "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.2, 14, 3.2, 17, 6],
             "line-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.34, 12, 0.58, 16, 0.72],
+          },
+        },
+        getExistingBeforeLayerId(this.map, this.beforeTrafficLayerId),
+      );
+    }
+
+    if (!this.map.getLayer(TRAFFIC_FLOW_CONFIG.trafficLoaderLayerId)) {
+      this.map.addLayer(
+        {
+          id: TRAFFIC_FLOW_CONFIG.trafficLoaderLayerId,
+          type: "line",
+          source: TRAFFIC_FLOW_CONFIG.trafficSourceId,
+          "source-layer": TRAFFIC_FLOW_CONFIG.trafficSourceLayer,
+          filter: [
+            "any",
+            ["has", "congestion"],
+            ["==", ["get", "closed"], true],
+            ["==", ["get", "closed"], "true"],
+            ["==", ["get", "closed"], "yes"],
+            ["==", ["get", "closed"], 1],
+          ],
+          layout: {
+            visibility: "none",
+          },
+          paint: {
+            "line-color": "rgba(0, 0, 0, 0)",
+            "line-opacity": 0,
+            "line-width": 1,
           },
         },
         getExistingBeforeLayerId(this.map, this.beforeTrafficLayerId),

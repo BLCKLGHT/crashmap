@@ -87,6 +87,17 @@ describe("traffic geometry interpolation", () => {
         geometry: { type: "Point", coordinates: [147.31, -42.88] },
       },
       {
+        id: "missing-congestion",
+        properties: { class: "primary" },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [147.31, -42.88],
+            [147.32, -42.88],
+          ],
+        },
+      },
+      {
         id: "short",
         properties: { congestion: "low" },
         geometry: {
@@ -111,7 +122,8 @@ describe("traffic congestion and density", () => {
   it("normalises congestion and closed states", () => {
     expect(normaliseCongestion("severe")).toBe("severe");
     expect(normaliseCongestion("moderate")).toBe("moderate");
-    expect(normaliseCongestion("unknown")).toBe("low");
+    expect(normaliseCongestion("unknown")).toBeNull();
+    expect(normaliseCongestion(undefined)).toBeNull();
     expect(normaliseCongestion("low", true)).toBe("closed");
   });
 

@@ -39,6 +39,7 @@ export const TRAFFIC_FLOW_CONFIG = {
   layerId: "viewer-traffic-flow-particles",
   trafficSourceId: "viewer-mapbox-traffic",
   trafficSourceLayer: "traffic",
+  trafficLoaderLayerId: "viewer-traffic-flow-source-loader",
   trafficConditionsLayerId: "viewer-traffic-conditions",
   minParticleZoom: 10,
   maxVisibleParticles: 220,
@@ -100,4 +101,3 @@ export const EMPTY_TRAFFIC_PARTICLE_FRAME: TrafficParticleFrame = {
   type: "FeatureCollection",
   features: [],
 };
-

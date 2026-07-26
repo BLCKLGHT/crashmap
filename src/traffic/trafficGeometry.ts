@@ -23,16 +23,24 @@ const normaliseRoadClass = (value: unknown): string => {
 export const normaliseCongestion = (
   value: unknown,
   closedValue?: unknown,
-): TrafficCongestion => {
-  if (closedValue === true || closedValue === "true" || closedValue === 1) return "closed";
-  if (typeof value !== "string") return "low";
+): TrafficCongestion | null => {
+  if (
+    closedValue === true ||
+    closedValue === "true" ||
+    closedValue === "yes" ||
+    closedValue === 1
+  ) {
+    return "closed";
+  }
+  if (typeof value !== "string") return null;
 
   const label = value.trim().toLowerCase();
   if (label === "closed") return "closed";
   if (label === "severe") return "severe";
   if (label === "heavy") return "heavy";
   if (label === "moderate") return "moderate";
-  return "low";
+  if (label === "low") return "low";
+  return null;
 };
 
 const isValidCoordinate = (coordinate: unknown): coordinate is [number, number] =>
@@ -90,6 +98,7 @@ export const extractTrafficSegments = (
     const lines = getFeatureLines(feature);
     const properties = feature.properties ?? {};
     const congestion = normaliseCongestion(properties.congestion, properties.closed);
+    if (!congestion) continue;
     const roadClass = normaliseRoadClass(
       properties.class ?? properties.road_class ?? properties.roadClass,
     );
@@ -116,4 +125,3 @@ export const extractTrafficSegments = (
 
   return segments;
 };
-
