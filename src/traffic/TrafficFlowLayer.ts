@@ -268,23 +268,27 @@ export class TrafficFlowLayer {
             "circle-radius": [
               "*",
               ["get", "scale"],
-              ["interpolate", ["linear"], ["zoom"], 8.8, 1.4, 12, 2.4, 15, 3.6],
+              ["interpolate", ["linear"], ["zoom"], 8.8, 2.2, 10, 3.1, 12, 4.2, 15, 5.8],
             ],
             "circle-color": [
               "match",
               ["get", "icon"],
               "traffic-flow-low",
-              "#bae6fd",
+              "#67e8f9",
               "traffic-flow-moderate",
-              "#99f6e4",
+              "#5eead4",
               "traffic-flow-heavy",
-              "#fde68a",
+              "#fde047",
               "traffic-flow-severe",
-              "#fecaca",
-              "#bae6fd",
+              "#fb7185",
+              "#67e8f9",
             ],
-            "circle-opacity": ["*", ["get", "opacity"], 0.62],
-            "circle-blur": 0.85,
+            "circle-opacity": [
+              "*",
+              ["get", "opacity"],
+              ["interpolate", ["linear"], ["zoom"], 8.8, 0.72, 12, 0.86, 15, 0.94],
+            ],
+            "circle-blur": 0.32,
           },
         },
         getExistingBeforeLayerId(this.map, this.beforeParticleLayerId),
@@ -389,7 +393,8 @@ export class TrafficFlowLayer {
     if (rebuildKey === this.lastRebuildKey) return;
     this.lastRebuildKey = rebuildKey;
 
-    this.engine.rebuild(extractTrafficSegments(features), zoom);
+    const segments = extractTrafficSegments(features);
+    this.engine.rebuild(segments, zoom);
   }
 
   private start(): void {

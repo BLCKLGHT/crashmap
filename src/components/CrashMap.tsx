@@ -599,7 +599,7 @@ export function CrashMap({
             beforeTrafficLayerId: HEATMAP_LAYER_ID,
             beforeParticleLayerId: CRASH_GLOW_LAYER_ID,
           });
-          trafficFlowLayerRef.current.setVisibility({
+          trafficFlowLayerRef.current?.setVisibility({
             trafficConditions: effectiveViewerLayers.trafficConditions,
             trafficFlow: effectiveViewerLayers.trafficFlow,
           });
