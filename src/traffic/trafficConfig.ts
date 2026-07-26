@@ -41,7 +41,7 @@ export const TRAFFIC_FLOW_CONFIG = {
   trafficSourceLayer: "traffic",
   trafficLoaderLayerId: "viewer-traffic-flow-source-loader",
   trafficConditionsLayerId: "viewer-traffic-conditions",
-  minParticleZoom: 10,
+  minParticleZoom: 8.8,
   maxVisibleParticles: 220,
   minimumSegmentLengthMetres: 45,
   lateralOffsetMetres: 1,
@@ -79,7 +79,8 @@ export const TRAFFIC_FLOW_CONFIG = {
     },
   },
   zoomDensity: [
-    { zoom: 10, multiplier: 0.25 },
+    { zoom: 8.8, multiplier: 0.16 },
+    { zoom: 10, multiplier: 0.28 },
     { zoom: 12, multiplier: 0.55 },
     { zoom: 14, multiplier: 1 },
     { zoom: 16, multiplier: 1.28 },

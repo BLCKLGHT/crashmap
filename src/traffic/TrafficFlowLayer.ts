@@ -98,11 +98,13 @@ export class TrafficFlowLayer {
     this.handleMoveEnd = this.handleMoveEnd.bind(this);
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
     this.handleSourceData = this.handleSourceData.bind(this);
+    this.handleMapIdle = this.handleMapIdle.bind(this);
 
     this.addLayers();
     this.map.on("moveend", this.handleMoveEnd);
     this.map.on("zoomend", this.handleMoveEnd);
     this.map.on("sourcedata", this.handleSourceData);
+    this.map.on("idle", this.handleMapIdle);
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
   }
 
@@ -139,6 +141,7 @@ export class TrafficFlowLayer {
     this.map.off("moveend", this.handleMoveEnd);
     this.map.off("zoomend", this.handleMoveEnd);
     this.map.off("sourcedata", this.handleSourceData);
+    this.map.off("idle", this.handleMapIdle);
   }
 
   private addLayers(): void {
@@ -184,7 +187,7 @@ export class TrafficFlowLayer {
                 "match",
                 ["get", "congestion"],
                 "low",
-                "#22c55e",
+                "rgba(34, 197, 94, 0.46)",
                 "moderate",
                 "#facc15",
                 "heavy",
@@ -195,7 +198,19 @@ export class TrafficFlowLayer {
               ],
             ],
             "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.2, 14, 3.2, 17, 6],
-            "line-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.34, 12, 0.58, 16, 0.72],
+            "line-opacity": [
+              "match",
+              ["get", "congestion"],
+              "low",
+              0.1,
+              "moderate",
+              0.54,
+              "heavy",
+              0.72,
+              "severe",
+              0.88,
+              0.34,
+            ],
           },
         },
         getExistingBeforeLayerId(this.map, this.beforeTrafficLayerId),
@@ -222,8 +237,8 @@ export class TrafficFlowLayer {
           },
           paint: {
             "line-color": "rgba(0, 0, 0, 0)",
-            "line-opacity": 0,
-            "line-width": 1,
+            "line-opacity": 0.001,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 8, 8, 14, 14, 17, 22],
           },
         },
         getExistingBeforeLayerId(this.map, this.beforeTrafficLayerId),
@@ -255,7 +270,7 @@ export class TrafficFlowLayer {
             "icon-size": [
               "*",
               ["get", "scale"],
-              ["interpolate", ["linear"], ["zoom"], 10, 0.16, 12, 0.24, 14, 0.36, 17, 0.56],
+              ["interpolate", ["linear"], ["zoom"], 8.8, 0.26, 10, 0.36, 12, 0.5, 14, 0.76, 17, 1],
             ],
             visibility: "none",
           },
@@ -269,7 +284,11 @@ export class TrafficFlowLayer {
   }
 
   private handleSourceData(event: MapSourceDataEvent): void {
-    if (event.sourceId !== TRAFFIC_FLOW_CONFIG.trafficSourceId || !event.isSourceLoaded) return;
+    if (event.sourceId !== TRAFFIC_FLOW_CONFIG.trafficSourceId) return;
+    if (this.isTrafficFlowVisible) this.rebuildParticles();
+  }
+
+  private handleMapIdle(): void {
     if (this.isTrafficFlowVisible) this.rebuildParticles();
   }
 
@@ -301,10 +320,28 @@ export class TrafficFlowLayer {
 
     let features: MapboxTrafficFeature[] = [];
     try {
-      features = this.map.querySourceFeatures(TRAFFIC_FLOW_CONFIG.trafficSourceId, {
-        sourceLayer: TRAFFIC_FLOW_CONFIG.trafficSourceLayer,
-      }) as MapboxTrafficFeature[];
+      const canvas = this.map.getCanvas();
+      features = this.map.queryRenderedFeatures(
+        [
+          [-80, -80],
+          [canvas.clientWidth + 80, canvas.clientHeight + 80],
+        ],
+        {
+          layers: [TRAFFIC_FLOW_CONFIG.trafficLoaderLayerId],
+        },
+      ) as MapboxTrafficFeature[];
+      if (!features.length) {
+        features = this.map.querySourceFeatures(TRAFFIC_FLOW_CONFIG.trafficSourceId, {
+          sourceLayer: TRAFFIC_FLOW_CONFIG.trafficSourceLayer,
+        }) as MapboxTrafficFeature[];
+      }
     } catch {
+      return;
+    }
+
+    if (!features.length) {
+      this.engine.clear();
+      this.setParticleData(EMPTY_TRAFFIC_PARTICLE_FRAME);
       return;
     }
 
