@@ -131,8 +131,8 @@ describe("traffic congestion and density", () => {
     const lowResidential = makeSegment("res-low", "low", "residential");
     const heavyMotorway = makeSegment("motor-heavy", "heavy", "motorway");
 
-    expect(getSegmentParticleCount(lowResidential, 8.7)).toBe(0);
-    expect(getSegmentParticleCount(lowResidential, 9.9)).toBeGreaterThanOrEqual(1);
+    expect(getSegmentParticleCount(lowResidential, 5.9)).toBe(0);
+    expect(getSegmentParticleCount(lowResidential, 6.6)).toBeGreaterThanOrEqual(1);
     expect(getSegmentParticleCount(makeSegment("closed", "closed"), 14)).toBe(0);
     expect(getSegmentParticleCount(heavyMotorway, 14)).toBeGreaterThan(
       getSegmentParticleCount(lowResidential, 14),

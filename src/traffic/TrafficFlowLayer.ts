@@ -1,7 +1,21 @@
-import type { GeoJSONSource, Map as MapboxMap, MapSourceDataEvent } from "mapbox-gl";
+import type {
+  ExpressionSpecification,
+  GeoJSONSource,
+  Map as MapboxMap,
+  MapSourceDataEvent,
+} from "mapbox-gl";
 import { extractTrafficSegments } from "./trafficGeometry";
 import { TrafficParticleEngine } from "./trafficParticleEngine";
-import { EMPTY_TRAFFIC_PARTICLE_FRAME, TRAFFIC_FLOW_CONFIG } from "./trafficConfig";
+import {
+  EMPTY_TRAFFIC_PARTICLE_FRAME,
+  TRAFFIC_FLOW_CONFIG,
+  type TrafficCongestion,
+  type TrafficFlowLineFeatureProperties,
+  type TrafficParticleFrame,
+  type TrafficParticleFrameFeatureProperties,
+  type TrafficParticlePointFrame,
+  type TrafficSegment,
+} from "./trafficConfig";
 
 type TrafficFlowLayerOptions = {
   beforeParticleLayerId?: string;
@@ -74,6 +88,80 @@ const safeSetLayerVisibility = (map: MapboxMap, layerId: string, visible: boolea
 const getExistingBeforeLayerId = (map: MapboxMap, layerId?: string): string | undefined =>
   layerId && map.getLayer(layerId) ? layerId : undefined;
 
+const FLOW_LINE_COLORS: Record<Exclude<TrafficCongestion, "closed">, string> = {
+  low: "rgba(34, 211, 238, 0.92)",
+  moderate: "rgba(45, 212, 191, 0.96)",
+  heavy: "rgba(253, 224, 71, 0.98)",
+  severe: "rgba(251, 113, 133, 1)",
+};
+
+const FLOW_LINE_SPEEDS: Record<Exclude<TrafficCongestion, "closed">, number> = {
+  low: 0.86,
+  moderate: 0.62,
+  heavy: 0.38,
+  severe: 0.22,
+};
+
+const TRANSPARENT_FLOW_COLOR = "rgba(255, 255, 255, 0)";
+
+const buildFlowLineGradient = (
+  congestion: Exclude<TrafficCongestion, "closed">,
+  phase: number,
+): ExpressionSpecification => {
+  const color = FLOW_LINE_COLORS[congestion];
+  const tail = Math.max(0, phase - 0.16);
+  const lead = Math.min(1, phase + 0.025);
+  const fade = Math.min(1, phase + 0.16);
+  const stops: Array<[number, string]> = [
+    [0, TRANSPARENT_FLOW_COLOR],
+    [tail, TRANSPARENT_FLOW_COLOR],
+    [phase, color],
+    [lead, "rgba(255, 255, 255, 0.96)"],
+    [fade, TRANSPARENT_FLOW_COLOR],
+    [1, TRANSPARENT_FLOW_COLOR],
+  ];
+  const sortedStops = stops
+    .filter(([stop], index, all) => index === 0 || stop > all[index - 1][0])
+    .flatMap(([stop, stopColor]) => [stop, stopColor]);
+
+  return ["interpolate", ["linear"], ["line-progress"], ...sortedStops] as ExpressionSpecification;
+};
+
+const isMovingCongestion = (
+  congestion: TrafficCongestion,
+): congestion is Exclude<TrafficCongestion, "closed"> => congestion !== "closed";
+
+const buildFlowLineFeatures = (
+  segments: TrafficSegment[],
+): Array<GeoJSON.Feature<GeoJSON.LineString, TrafficFlowLineFeatureProperties>> =>
+  segments
+    .filter((segment) => isMovingCongestion(segment.congestion))
+    .sort((a, b) => b.lengthMetres - a.lengthMetres)
+    .slice(0, TRAFFIC_FLOW_CONFIG.maxVisibleFlowLines)
+    .map((segment) => {
+      const congestion = segment.congestion as Exclude<TrafficCongestion, "closed">;
+      return {
+        type: "Feature" as const,
+        properties: {
+          id: segment.id,
+          congestion,
+          opacity: TRAFFIC_FLOW_CONFIG.congestion[congestion].opacity,
+        },
+        geometry: {
+          type: "LineString" as const,
+          coordinates: segment.coordinates,
+        },
+      };
+    });
+
+const mergeParticleAndLineFrames = (
+  lines: Array<GeoJSON.Feature<GeoJSON.LineString, TrafficFlowLineFeatureProperties>>,
+  particles: TrafficParticlePointFrame,
+): TrafficParticleFrame => ({
+  type: "FeatureCollection",
+  features: [...lines, ...particles.features],
+});
+
 export class TrafficFlowLayer {
   private readonly engine = new TrafficParticleEngine();
   private readonly map: MapboxMap;
@@ -85,6 +173,9 @@ export class TrafficFlowLayer {
   private isTrafficConditionsVisible = false;
   private reducedMotionQuery: MediaQueryList | null = null;
   private lastRebuildKey = "";
+  private flowLineFeatures: Array<
+    GeoJSON.Feature<GeoJSON.LineString, TrafficFlowLineFeatureProperties>
+  > = [];
 
   constructor(map: MapboxMap, options: TrafficFlowLayerOptions = {}) {
     this.map = map;
@@ -121,16 +212,26 @@ export class TrafficFlowLayer {
       TRAFFIC_FLOW_CONFIG.trafficLoaderLayerId,
       visibility.trafficFlow,
     );
+    Object.values(TRAFFIC_FLOW_CONFIG.lineLayerIds).forEach((layerId) => {
+      safeSetLayerVisibility(this.map, layerId, visibility.trafficFlow);
+    });
     safeSetLayerVisibility(this.map, TRAFFIC_FLOW_CONFIG.glowLayerId, visibility.trafficFlow);
     safeSetLayerVisibility(this.map, TRAFFIC_FLOW_CONFIG.layerId, visibility.trafficFlow);
 
     if (visibility.trafficFlow) {
       this.lastRebuildKey = "";
+      if (this.map.getZoom() < TRAFFIC_FLOW_CONFIG.minParticleZoom) {
+        this.map.easeTo({
+          zoom: TRAFFIC_FLOW_CONFIG.minParticleZoom,
+          duration: 420,
+        });
+      }
       this.rebuildParticles();
       this.start();
     } else {
       this.stop();
       this.engine.clear();
+      this.flowLineFeatures = [];
       this.setParticleData(EMPTY_TRAFFIC_PARTICLE_FRAME);
     }
   }
@@ -249,11 +350,106 @@ export class TrafficFlowLayer {
     if (!this.map.getSource(TRAFFIC_FLOW_CONFIG.sourceId)) {
       this.map.addSource(TRAFFIC_FLOW_CONFIG.sourceId, {
         type: "geojson",
+        lineMetrics: true,
         data: EMPTY_TRAFFIC_PARTICLE_FRAME,
       });
     }
 
     addParticleImages(this.map);
+
+    (Object.entries(TRAFFIC_FLOW_CONFIG.lineLayerIds) as Array<
+      [Exclude<TrafficCongestion, "closed">, string]
+    >).forEach(([congestion, layerId]) => {
+      if (this.map.getLayer(layerId)) return;
+      this.map.addLayer(
+        {
+          id: layerId,
+          type: "line",
+          source: TRAFFIC_FLOW_CONFIG.sourceId,
+          filter: [
+            "all",
+            ["==", ["geometry-type"], "LineString"],
+            ["==", ["get", "congestion"], congestion],
+          ],
+          layout: {
+            "line-cap": "round",
+            "line-join": "round",
+            visibility: "none",
+          },
+          paint: {
+            "line-gradient": buildFlowLineGradient(congestion, 0.5),
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6,
+              [
+                "match",
+                ["get", "congestion"],
+                "low",
+                1.1,
+                "moderate",
+                1.25,
+                "heavy",
+                1.45,
+                "severe",
+                1.7,
+                1.1,
+              ],
+              10,
+              [
+                "match",
+                ["get", "congestion"],
+                "low",
+                1.6,
+                "moderate",
+                1.9,
+                "heavy",
+                2.25,
+                "severe",
+                2.8,
+                1.6,
+              ],
+              14,
+              [
+                "match",
+                ["get", "congestion"],
+                "low",
+                2.5,
+                "moderate",
+                3.1,
+                "heavy",
+                3.7,
+                "severe",
+                4.6,
+                2.5,
+              ],
+              17,
+              [
+                "match",
+                ["get", "congestion"],
+                "low",
+                4,
+                "moderate",
+                4.8,
+                "heavy",
+                5.8,
+                "severe",
+                7,
+                4,
+              ],
+            ],
+            "line-opacity": [
+              "*",
+              ["get", "opacity"],
+              ["interpolate", ["linear"], ["zoom"], 6, 0.54, 8.8, 0.66, 12, 0.78, 15, 0.88],
+            ],
+          },
+        },
+        getExistingBeforeLayerId(this.map, TRAFFIC_FLOW_CONFIG.glowLayerId) ??
+          getExistingBeforeLayerId(this.map, this.beforeParticleLayerId),
+      );
+    });
 
     if (!this.map.getLayer(TRAFFIC_FLOW_CONFIG.glowLayerId)) {
       this.map.addLayer(
@@ -268,15 +464,15 @@ export class TrafficFlowLayer {
             "circle-radius": [
               "*",
               ["get", "scale"],
-              ["interpolate", ["linear"], ["zoom"], 8.8, 2.2, 10, 3.1, 12, 4.2, 15, 5.8],
+              ["interpolate", ["linear"], ["zoom"], 6, 4.4, 6.6, 5.2, 8.8, 4.8, 10, 4.6, 12, 4.8, 15, 5.8],
             ],
             "circle-color": [
               "match",
               ["get", "icon"],
               "traffic-flow-low",
-              "#67e8f9",
+              "#22d3ee",
               "traffic-flow-moderate",
-              "#5eead4",
+              "#2dd4bf",
               "traffic-flow-heavy",
               "#fde047",
               "traffic-flow-severe",
@@ -286,9 +482,9 @@ export class TrafficFlowLayer {
             "circle-opacity": [
               "*",
               ["get", "opacity"],
-              ["interpolate", ["linear"], ["zoom"], 8.8, 0.72, 12, 0.86, 15, 0.94],
+              ["interpolate", ["linear"], ["zoom"], 6, 0.92, 8.8, 0.9, 12, 0.88, 15, 0.94],
             ],
-            "circle-blur": 0.32,
+            "circle-blur": 0.18,
           },
         },
         getExistingBeforeLayerId(this.map, this.beforeParticleLayerId),
@@ -311,7 +507,7 @@ export class TrafficFlowLayer {
             "icon-size": [
               "*",
               ["get", "scale"],
-              ["interpolate", ["linear"], ["zoom"], 8.8, 0.42, 10, 0.52, 12, 0.68, 14, 0.92, 17, 1.18],
+              ["interpolate", ["linear"], ["zoom"], 6, 0.24, 8.8, 0.42, 10, 0.52, 12, 0.68, 14, 0.92, 17, 1.18],
             ],
             visibility: "none",
           },
@@ -348,6 +544,7 @@ export class TrafficFlowLayer {
   private rebuildParticles(): void {
     if (this.reducedMotionQuery?.matches) {
       this.stop();
+      this.flowLineFeatures = [];
       this.setParticleData(EMPTY_TRAFFIC_PARTICLE_FRAME);
       return;
     }
@@ -355,6 +552,7 @@ export class TrafficFlowLayer {
     const zoom = this.map.getZoom();
     if (zoom < TRAFFIC_FLOW_CONFIG.minParticleZoom) {
       this.engine.clear();
+      this.flowLineFeatures = [];
       this.setParticleData(EMPTY_TRAFFIC_PARTICLE_FRAME);
       return;
     }
@@ -382,6 +580,7 @@ export class TrafficFlowLayer {
 
     if (!features.length) {
       this.engine.clear();
+      this.flowLineFeatures = [];
       this.setParticleData(EMPTY_TRAFFIC_PARTICLE_FRAME);
       return;
     }
@@ -395,6 +594,7 @@ export class TrafficFlowLayer {
 
     const segments = extractTrafficSegments(features);
     this.engine.rebuild(segments, zoom);
+    this.flowLineFeatures = buildFlowLineFeatures(segments);
   }
 
   private start(): void {
@@ -415,7 +615,8 @@ export class TrafficFlowLayer {
       }
 
       const frame = this.engine.frame(time / 1000, this.map.getZoom());
-      this.setParticleData(frame);
+      this.updateFlowLineGradients(time / 1000);
+      this.setParticleData(mergeParticleAndLineFrames(this.flowLineFeatures, frame));
       this.animationFrame = window.requestAnimationFrame(animate);
     };
 
@@ -429,8 +630,18 @@ export class TrafficFlowLayer {
     }
   }
 
-  private setParticleData(frame: GeoJSON.FeatureCollection<GeoJSON.Point>): void {
+  private setParticleData(frame: TrafficParticleFrame): void {
     const source = this.map.getSource(TRAFFIC_FLOW_CONFIG.sourceId) as GeoJSONSource | undefined;
     source?.setData(frame);
+  }
+
+  private updateFlowLineGradients(timeSeconds: number): void {
+    (Object.entries(TRAFFIC_FLOW_CONFIG.lineLayerIds) as Array<
+      [Exclude<TrafficCongestion, "closed">, string]
+    >).forEach(([congestion, layerId]) => {
+      if (!this.map.getLayer(layerId)) return;
+      const phase = (timeSeconds * FLOW_LINE_SPEEDS[congestion]) % 1;
+      this.map.setPaintProperty(layerId, "line-gradient", buildFlowLineGradient(congestion, phase));
+    });
   }
 }

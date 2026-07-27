@@ -1,8 +1,8 @@
 import {
-  EMPTY_TRAFFIC_PARTICLE_FRAME,
+  EMPTY_TRAFFIC_PARTICLE_POINT_FRAME,
   TRAFFIC_FLOW_CONFIG,
   type TrafficParticle,
-  type TrafficParticleFrame,
+  type TrafficParticlePointFrame,
   type TrafficSegment,
 } from "./trafficConfig";
 import {
@@ -128,10 +128,10 @@ export class TrafficParticleEngine {
     this.lastTimeSeconds = 0;
   }
 
-  frame(timeSeconds: number, zoom: number): TrafficParticleFrame {
+  frame(timeSeconds: number, zoom: number): TrafficParticlePointFrame {
     if (!this.particles.length || zoom < TRAFFIC_FLOW_CONFIG.minParticleZoom) {
       this.lastTimeSeconds = timeSeconds;
-      return EMPTY_TRAFFIC_PARTICLE_FRAME;
+      return EMPTY_TRAFFIC_PARTICLE_POINT_FRAME;
     }
 
     const deltaSeconds =
