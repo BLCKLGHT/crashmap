@@ -80,6 +80,48 @@ const addParticleImages = (map: MapboxMap): void => {
   }
 };
 
+const createTrafficDotImage = (
+  fillColor: string,
+  leadColor = "rgba(255,255,255,0.96)",
+): ImageData | null => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 28;
+  canvas.height = 16;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.shadowColor = fillColor;
+  context.shadowBlur = 8;
+  context.fillStyle = fillColor;
+  context.beginPath();
+  context.roundRect(3, 4, 20, 8, 4);
+  context.fill();
+
+  context.shadowBlur = 0;
+  context.fillStyle = leadColor;
+  context.beginPath();
+  context.arc(22, 8, 2.4, 0, Math.PI * 2);
+  context.fill();
+
+  return context.getImageData(0, 0, canvas.width, canvas.height);
+};
+
+const addTrafficDotImages = (map: MapboxMap): void => {
+  const images = [
+    ["traffic-dot-low", "rgba(103, 232, 249, 0.88)"],
+    ["traffic-dot-moderate", "rgba(45, 212, 191, 0.92)"],
+    ["traffic-dot-heavy", "rgba(253, 224, 71, 0.96)"],
+    ["traffic-dot-severe", "rgba(251, 113, 133, 0.98)"],
+  ] as const;
+
+  for (const [id, color] of images) {
+    if (map.hasImage(id)) continue;
+    const image = createTrafficDotImage(color);
+    if (image) map.addImage(id, image, { pixelRatio: 2 });
+  }
+};
+
 const safeSetLayerVisibility = (map: MapboxMap, layerId: string, visible: boolean): void => {
   if (!map.getLayer(layerId)) return;
   map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
@@ -246,6 +288,9 @@ export class TrafficFlowLayer {
     Object.values(TRAFFIC_FLOW_CONFIG.directLineLayerIds).forEach((layerId) => {
       safeSetLayerVisibility(this.map, layerId, false);
     });
+    Object.values(TRAFFIC_FLOW_CONFIG.trafficDotLayerIds).forEach((layerId) => {
+      safeSetLayerVisibility(this.map, layerId, visibility.trafficFlow);
+    });
     safeSetLayerVisibility(this.map, TRAFFIC_FLOW_CONFIG.glowLayerId, visibility.trafficFlow);
     safeSetLayerVisibility(this.map, TRAFFIC_FLOW_CONFIG.layerId, visibility.trafficFlow);
 
@@ -387,6 +432,78 @@ export class TrafficFlowLayer {
     }
 
     addParticleImages(this.map);
+    addTrafficDotImages(this.map);
+
+    (Object.entries(TRAFFIC_FLOW_CONFIG.trafficDotLayerIds) as Array<
+      [Exclude<TrafficCongestion, "closed">, string]
+    >).forEach(([congestion, layerId]) => {
+      if (this.map.getLayer(layerId)) return;
+      const dotSettings = {
+        low: { spacing: 138, size: 0.34, opacity: 0.48 },
+        moderate: { spacing: 86, size: 0.4, opacity: 0.66 },
+        heavy: { spacing: 48, size: 0.47, opacity: 0.82 },
+        severe: { spacing: 30, size: 0.52, opacity: 0.92 },
+      }[congestion];
+      this.map.addLayer(
+        {
+          id: layerId,
+          type: "symbol",
+          source: TRAFFIC_FLOW_CONFIG.trafficSourceId,
+          "source-layer": TRAFFIC_FLOW_CONFIG.trafficSourceLayer,
+          filter: buildMovingTrafficFilter(congestion),
+          minzoom: TRAFFIC_FLOW_CONFIG.minParticleZoom,
+          layout: {
+            "symbol-placement": "line",
+            "symbol-spacing": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6,
+              dotSettings.spacing * 1.7,
+              10,
+              dotSettings.spacing,
+              14,
+              dotSettings.spacing * 0.72,
+              17,
+              dotSettings.spacing * 0.54,
+            ],
+            "icon-image": `traffic-dot-${congestion}`,
+            "icon-size": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6,
+              dotSettings.size * 0.8,
+              10,
+              dotSettings.size,
+              14,
+              dotSettings.size * 1.18,
+              17,
+              dotSettings.size * 1.42,
+            ],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "icon-rotation-alignment": "map",
+            "symbol-z-order": "source",
+            visibility: "none",
+          },
+          paint: {
+            "icon-opacity": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6,
+              dotSettings.opacity * 0.74,
+              10,
+              dotSettings.opacity,
+              14,
+              Math.min(1, dotSettings.opacity * 1.08),
+            ],
+          },
+        },
+        getExistingBeforeLayerId(this.map, this.beforeParticleLayerId),
+      );
+    });
 
     (Object.entries(TRAFFIC_FLOW_CONFIG.directLineLayerIds) as Array<
       [Exclude<TrafficCongestion, "closed">, string]
