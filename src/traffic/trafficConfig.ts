@@ -53,6 +53,12 @@ export const TRAFFIC_FLOW_CONFIG = {
     heavy: "viewer-traffic-flow-line-heavy",
     severe: "viewer-traffic-flow-line-severe",
   },
+  directLineLayerIds: {
+    low: "viewer-traffic-flow-direct-low",
+    moderate: "viewer-traffic-flow-direct-moderate",
+    heavy: "viewer-traffic-flow-direct-heavy",
+    severe: "viewer-traffic-flow-direct-severe",
+  },
   glowLayerId: "viewer-traffic-flow-particle-glow",
   layerId: "viewer-traffic-flow-particles",
   trafficSourceId: "viewer-mapbox-traffic",

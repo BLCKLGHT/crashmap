@@ -102,6 +102,16 @@ const FLOW_LINE_SPEEDS: Record<Exclude<TrafficCongestion, "closed">, number> = {
   severe: 0.22,
 };
 
+const FLOW_DASH_SETTINGS: Record<
+  Exclude<TrafficCongestion, "closed">,
+  { dash: number; gap: number; width: number; opacity: number }
+> = {
+  low: { dash: 1.2, gap: 6.4, width: 1.8, opacity: 0.72 },
+  moderate: { dash: 1.7, gap: 5.2, width: 2.1, opacity: 0.82 },
+  heavy: { dash: 2.2, gap: 4.3, width: 2.7, opacity: 0.92 },
+  severe: { dash: 2.7, gap: 3.5, width: 3.3, opacity: 0.98 },
+};
+
 const TRANSPARENT_FLOW_COLOR = "rgba(255, 255, 255, 0)";
 
 const buildFlowLineGradient = (
@@ -126,6 +136,24 @@ const buildFlowLineGradient = (
 
   return ["interpolate", ["linear"], ["line-progress"], ...sortedStops] as ExpressionSpecification;
 };
+
+const buildFlowDashArray = (congestion: Exclude<TrafficCongestion, "closed">, phase: number) => {
+  const settings = FLOW_DASH_SETTINGS[congestion];
+  const leadingGap = Math.max(0.01, phase * settings.gap);
+  const trailingGap = Math.max(0.01, (1 - phase) * settings.gap);
+  return [0.01, leadingGap, settings.dash, trailingGap];
+};
+
+const buildMovingTrafficFilter = (
+  congestion: Exclude<TrafficCongestion, "closed">,
+): ExpressionSpecification => [
+  "all",
+  ["==", ["get", "congestion"], congestion],
+  ["!=", ["get", "closed"], true],
+  ["!=", ["get", "closed"], "true"],
+  ["!=", ["get", "closed"], "yes"],
+  ["!=", ["get", "closed"], 1],
+];
 
 const isMovingCongestion = (
   congestion: TrafficCongestion,
@@ -213,6 +241,9 @@ export class TrafficFlowLayer {
       visibility.trafficFlow,
     );
     Object.values(TRAFFIC_FLOW_CONFIG.lineLayerIds).forEach((layerId) => {
+      safeSetLayerVisibility(this.map, layerId, visibility.trafficFlow);
+    });
+    Object.values(TRAFFIC_FLOW_CONFIG.directLineLayerIds).forEach((layerId) => {
       safeSetLayerVisibility(this.map, layerId, visibility.trafficFlow);
     });
     safeSetLayerVisibility(this.map, TRAFFIC_FLOW_CONFIG.glowLayerId, visibility.trafficFlow);
@@ -356,6 +387,59 @@ export class TrafficFlowLayer {
     }
 
     addParticleImages(this.map);
+
+    (Object.entries(TRAFFIC_FLOW_CONFIG.directLineLayerIds) as Array<
+      [Exclude<TrafficCongestion, "closed">, string]
+    >).forEach(([congestion, layerId]) => {
+      if (this.map.getLayer(layerId)) return;
+      const settings = FLOW_DASH_SETTINGS[congestion];
+      this.map.addLayer(
+        {
+          id: layerId,
+          type: "line",
+          source: TRAFFIC_FLOW_CONFIG.trafficSourceId,
+          "source-layer": TRAFFIC_FLOW_CONFIG.trafficSourceLayer,
+          filter: buildMovingTrafficFilter(congestion),
+          minzoom: TRAFFIC_FLOW_CONFIG.minParticleZoom,
+          layout: {
+            "line-cap": "round",
+            "line-join": "round",
+            visibility: "none",
+          },
+          paint: {
+            "line-color": FLOW_LINE_COLORS[congestion],
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6,
+              settings.width,
+              10,
+              settings.width * 1.3,
+              14,
+              settings.width * 1.85,
+              17,
+              settings.width * 2.45,
+            ],
+            "line-opacity": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6,
+              settings.opacity * 0.68,
+              10,
+              settings.opacity * 0.8,
+              14,
+              settings.opacity,
+            ],
+            "line-blur": ["interpolate", ["linear"], ["zoom"], 6, 0.2, 14, 0.38, 17, 0.55],
+            "line-dasharray": buildFlowDashArray(congestion, 0.5),
+          },
+        },
+        getExistingBeforeLayerId(this.map, TRAFFIC_FLOW_CONFIG.glowLayerId) ??
+          getExistingBeforeLayerId(this.map, this.beforeParticleLayerId),
+      );
+    });
 
     (Object.entries(TRAFFIC_FLOW_CONFIG.lineLayerIds) as Array<
       [Exclude<TrafficCongestion, "closed">, string]
@@ -642,6 +726,14 @@ export class TrafficFlowLayer {
       if (!this.map.getLayer(layerId)) return;
       const phase = (timeSeconds * FLOW_LINE_SPEEDS[congestion]) % 1;
       this.map.setPaintProperty(layerId, "line-gradient", buildFlowLineGradient(congestion, phase));
+    });
+
+    (Object.entries(TRAFFIC_FLOW_CONFIG.directLineLayerIds) as Array<
+      [Exclude<TrafficCongestion, "closed">, string]
+    >).forEach(([congestion, layerId]) => {
+      if (!this.map.getLayer(layerId)) return;
+      const phase = (timeSeconds * FLOW_LINE_SPEEDS[congestion]) % 1;
+      this.map.setPaintProperty(layerId, "line-dasharray", buildFlowDashArray(congestion, phase));
     });
   }
 }
