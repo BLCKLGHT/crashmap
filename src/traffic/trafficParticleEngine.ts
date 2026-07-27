@@ -48,6 +48,7 @@ export const getSegmentParticleCount = (segment: TrafficSegment, zoom: number): 
     getRoadClassMultiplier(segment.roadClass);
 
   if (count <= 0) return 0;
+  if (count < 0.55) return 0;
   return Math.max(1, Math.round(count));
 };
 

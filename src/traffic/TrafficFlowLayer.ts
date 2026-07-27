@@ -241,10 +241,10 @@ export class TrafficFlowLayer {
       visibility.trafficFlow,
     );
     Object.values(TRAFFIC_FLOW_CONFIG.lineLayerIds).forEach((layerId) => {
-      safeSetLayerVisibility(this.map, layerId, visibility.trafficFlow);
+      safeSetLayerVisibility(this.map, layerId, false);
     });
     Object.values(TRAFFIC_FLOW_CONFIG.directLineLayerIds).forEach((layerId) => {
-      safeSetLayerVisibility(this.map, layerId, visibility.trafficFlow);
+      safeSetLayerVisibility(this.map, layerId, false);
     });
     safeSetLayerVisibility(this.map, TRAFFIC_FLOW_CONFIG.glowLayerId, visibility.trafficFlow);
     safeSetLayerVisibility(this.map, TRAFFIC_FLOW_CONFIG.layerId, visibility.trafficFlow);
@@ -421,17 +421,7 @@ export class TrafficFlowLayer {
               17,
               settings.width * 2.45,
             ],
-            "line-opacity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              6,
-              settings.opacity * 0.68,
-              10,
-              settings.opacity * 0.8,
-              14,
-              settings.opacity,
-            ],
+            "line-opacity": 0,
             "line-blur": ["interpolate", ["linear"], ["zoom"], 6, 0.2, 14, 0.38, 17, 0.55],
             "line-dasharray": buildFlowDashArray(congestion, 0.5),
           },
@@ -541,6 +531,7 @@ export class TrafficFlowLayer {
           id: TRAFFIC_FLOW_CONFIG.glowLayerId,
           type: "circle",
           source: TRAFFIC_FLOW_CONFIG.sourceId,
+          filter: ["==", ["geometry-type"], "Point"],
           layout: {
             visibility: "none",
           },
@@ -548,7 +539,21 @@ export class TrafficFlowLayer {
             "circle-radius": [
               "*",
               ["get", "scale"],
-              ["interpolate", ["linear"], ["zoom"], 6, 4.4, 6.6, 5.2, 8.8, 4.8, 10, 4.6, 12, 4.8, 15, 5.8],
+              [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                6,
+                3.2,
+                8.8,
+                3.8,
+                10,
+                4.4,
+                12,
+                5.2,
+                15,
+                6.6,
+              ],
             ],
             "circle-color": [
               "match",
@@ -566,9 +571,9 @@ export class TrafficFlowLayer {
             "circle-opacity": [
               "*",
               ["get", "opacity"],
-              ["interpolate", ["linear"], ["zoom"], 6, 0.92, 8.8, 0.9, 12, 0.88, 15, 0.94],
+              ["interpolate", ["linear"], ["zoom"], 6, 0.54, 8.8, 0.62, 12, 0.72, 15, 0.8],
             ],
-            "circle-blur": 0.18,
+            "circle-blur": 0.68,
           },
         },
         getExistingBeforeLayerId(this.map, this.beforeParticleLayerId),
@@ -579,24 +584,52 @@ export class TrafficFlowLayer {
       this.map.addLayer(
         {
           id: TRAFFIC_FLOW_CONFIG.layerId,
-          type: "symbol",
+          type: "circle",
           source: TRAFFIC_FLOW_CONFIG.sourceId,
+          filter: ["==", ["geometry-type"], "Point"],
           layout: {
-            "icon-image": ["get", "icon"],
-            "icon-allow-overlap": true,
-            "icon-ignore-placement": true,
-            "icon-rotation-alignment": "map",
-            "icon-pitch-alignment": "map",
-            "icon-rotate": ["get", "bearing"],
-            "icon-size": [
-              "*",
-              ["get", "scale"],
-              ["interpolate", ["linear"], ["zoom"], 6, 0.24, 8.8, 0.42, 10, 0.52, 12, 0.68, 14, 0.92, 17, 1.18],
-            ],
             visibility: "none",
           },
           paint: {
-            "icon-opacity": ["get", "opacity"],
+            "circle-radius": [
+              "*",
+              ["get", "scale"],
+              [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                6,
+                1.15,
+                8.8,
+                1.45,
+                10,
+                1.7,
+                12,
+                2.15,
+                15,
+                2.8,
+              ],
+            ],
+            "circle-color": [
+              "match",
+              ["get", "icon"],
+              "traffic-flow-low",
+              "#67e8f9",
+              "traffic-flow-moderate",
+              "#2dd4bf",
+              "traffic-flow-heavy",
+              "#fde047",
+              "traffic-flow-severe",
+              "#fb7185",
+              "#67e8f9",
+            ],
+            "circle-stroke-color": "rgba(255, 255, 255, 0.76)",
+            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 6, 0.35, 12, 0.55, 15, 0.75],
+            "circle-opacity": [
+              "*",
+              ["get", "opacity"],
+              ["interpolate", ["linear"], ["zoom"], 6, 0.78, 10, 0.86, 14, 0.94],
+            ],
           },
         },
         getExistingBeforeLayerId(this.map, this.beforeParticleLayerId),
@@ -644,13 +677,19 @@ export class TrafficFlowLayer {
     let features: MapboxTrafficFeature[] = [];
     try {
       const canvas = this.map.getCanvas();
+      const queryLayers = [
+        TRAFFIC_FLOW_CONFIG.trafficLoaderLayerId,
+        ...(this.isTrafficConditionsVisible
+          ? [TRAFFIC_FLOW_CONFIG.trafficConditionsLayerId]
+          : []),
+      ].filter((layerId) => this.map.getLayer(layerId));
       features = this.map.queryRenderedFeatures(
         [
           [-80, -80],
           [canvas.clientWidth + 80, canvas.clientHeight + 80],
         ],
         {
-          layers: [TRAFFIC_FLOW_CONFIG.trafficLoaderLayerId],
+          layers: queryLayers,
         },
       ) as MapboxTrafficFeature[];
       if (!features.length) {
