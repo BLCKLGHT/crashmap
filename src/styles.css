@@ -1884,69 +1884,6 @@ button:disabled {
   font-size: 0.86rem;
 }
 
-.viewer-layer-controls {
-  display: grid;
-  gap: 0.55rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  padding: 0.8rem;
-}
-
-.viewer-layer-controls__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
-
-.viewer-layer-tooltip {
-  display: inline-grid;
-  width: 1.55rem;
-  height: 1.55rem;
-  place-items: center;
-  border-radius: 999px;
-  background: #eef8f5;
-  color: var(--accent-strong);
-}
-
-.viewer-layer-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.35rem;
-}
-
-.viewer-layer-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.42rem;
-  min-height: 2.35rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel-soft);
-  color: var(--muted);
-  font-size: 0.74rem;
-  font-weight: 850;
-  line-height: 1.1;
-  padding: 0.42rem 0.55rem;
-  text-align: left;
-}
-
-.viewer-layer-toggle svg {
-  flex: 0 0 auto;
-}
-
-.viewer-layer-toggle.is-active {
-  border-color: rgba(15, 118, 110, 0.42);
-  background: var(--accent);
-  color: #fff;
-}
-
-.viewer-layer-note {
-  margin-top: 0;
-}
-
 .timeline-panel {
   display: grid;
   gap: 0.8rem;

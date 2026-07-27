@@ -6,13 +6,7 @@ import { LoadingState } from "./components/LoadingState";
 import { PublicAnalytics } from "./components/PublicAnalytics";
 import { fetchAllTasCrashData } from "./data/crashData";
 import { defaultFilters, filterCrashes } from "./data/filterCrashes";
-import type {
-  CrashDataState,
-  CrashFilters,
-  CrashRecord,
-  TimelineState,
-  ViewerLayerToggles,
-} from "./types/crash";
+import type { CrashDataState, CrashFilters, CrashRecord, TimelineState } from "./types/crash";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const crashTimeCache = new WeakMap<CrashRecord, number | null>();
@@ -60,12 +54,6 @@ const getTimePhase = (time?: number): "day" | "dawn" | "dusk" | "night" => {
 };
 
 type PublicViewerMode = "map" | "analytics";
-const DEFAULT_VIEWER_LAYERS: ViewerLayerToggles = {
-  crashMarkers: true,
-  heatmap: true,
-  trafficConditions: false,
-  trafficFlow: false,
-};
 
 export function PublicMapViewer() {
   const [dataState, setDataState] = useState<CrashDataState>({ crashes: [] });
@@ -74,8 +62,6 @@ export function PublicMapViewer() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isTimeOfDayEnabled, setIsTimeOfDayEnabled] = useState(false);
   const [viewerMode, setViewerMode] = useState<PublicViewerMode>("map");
-  const [viewerLayers, setViewerLayers] =
-    useState<ViewerLayerToggles>(DEFAULT_VIEWER_LAYERS);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadedCount, setLoadedCount] = useState(0);
@@ -232,7 +218,6 @@ export function PublicMapViewer() {
           weatherMode="off"
           weatherMatchedCrashIds={[]}
           timePhase={timePhase}
-          viewerLayers={viewerLayers}
         />
       ) : (
         <PublicAnalytics crashes={analyticsCrashes} totalCrashes={dataState.crashes.length} />
@@ -285,9 +270,6 @@ export function PublicMapViewer() {
         showWeatherControls={false}
         showDeveloperWeatherSimulation={false}
         showTimeOfDayControl={false}
-        showViewerLayerControls={viewerMode === "map"}
-        viewerLayers={viewerLayers}
-        onViewerLayerChange={setViewerLayers}
         onChange={setFilters}
         onTimelineChange={setTimeline}
         onTimeOfDayToggle={() => setIsTimeOfDayEnabled((enabled) => !enabled)}

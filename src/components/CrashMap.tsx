@@ -4,13 +4,11 @@ import type {
   CrashRecord,
   CurrentDrivingConditions,
   DriveLocation,
-  ViewerLayerToggles,
   WeatherMatchSetting,
 } from "../types/crash";
 import { getCrashConditionMatch } from "../data/conditionMatching";
 import { isFatalCrash, isSeriousCrash } from "../data/filterCrashes";
 import { fetchRuntimeMapboxToken, getMapboxToken } from "../data/mapboxToken";
-import { TrafficFlowLayer } from "../traffic/TrafficFlowLayer";
 import vehicleTopImageUrl from "../assets/vehicle-top.png";
 
 type CrashMapProps = {
@@ -21,7 +19,6 @@ type CrashMapProps = {
   weatherMatchedCrashIds?: string[];
   timePhase: "day" | "dawn" | "dusk" | "night";
   isFullscreen?: boolean;
-  viewerLayers?: ViewerLayerToggles;
   driveMode?: {
     isActive: boolean;
     isSimulation: boolean;
@@ -71,20 +68,6 @@ const CLUSTER_LAYER_MAX_ZOOM = 12.6;
 const POINT_MIN_ZOOM = 12;
 const SINGLE_COUNT_MAX_ZOOM = 12.35;
 const DRIVE_ZOOM = 15.5;
-const DEFAULT_VIEWER_LAYERS: ViewerLayerToggles = {
-  crashMarkers: true,
-  heatmap: true,
-  trafficConditions: false,
-  trafficFlow: false,
-};
-const CRASH_MARKER_LAYER_IDS = [
-  CLUSTER_LAYER_ID,
-  CLUSTER_COUNT_LAYER_ID,
-  SINGLE_COUNT_LAYER_ID,
-  SINGLE_COUNT_TEXT_LAYER_ID,
-  CRASH_GLOW_LAYER_ID,
-  CRASH_DOT_LAYER_ID,
-];
 
 const getStyleForPhase = (phase: CrashMapProps["timePhase"]): string =>
   phase === "night" || phase === "dusk"
@@ -211,7 +194,6 @@ export function CrashMap({
   weatherMode,
   weatherMatchedCrashIds,
   timePhase,
-  viewerLayers,
   driveMode,
 }: CrashMapProps) {
   const buildTimeToken = getMapboxToken();
@@ -224,7 +206,6 @@ export function CrashMap({
   const mapRef = useRef<MapboxMap | null>(null);
   const markerRef = useRef<Marker | null>(null);
   const popupRef = useRef<Popup | null>(null);
-  const trafficFlowLayerRef = useRef<TrafficFlowLayer | null>(null);
   const driveLocationRef = useRef<DriveLocation | null>(null);
   const simulationRef = useRef<CrashMapProps["driveMode"]>(driveMode);
   const crashFeatureCollectionRef =
@@ -249,10 +230,6 @@ export function CrashMap({
   const vehicleFeatureCollection = useMemo(
     () => toVehicleFeatureCollection(driveMode?.location ?? null),
     [driveMode?.location],
-  );
-  const effectiveViewerLayers = useMemo<ViewerLayerToggles>(
-    () => ({ ...DEFAULT_VIEWER_LAYERS, ...viewerLayers }),
-    [viewerLayers],
   );
   crashFeatureCollectionRef.current = crashFeatureCollection;
   vehicleFeatureCollectionRef.current = vehicleFeatureCollection;
@@ -595,15 +572,6 @@ export function CrashMap({
             },
           });
 
-          trafficFlowLayerRef.current = new TrafficFlowLayer(map, {
-            beforeTrafficLayerId: HEATMAP_LAYER_ID,
-            beforeParticleLayerId: CRASH_GLOW_LAYER_ID,
-          });
-          trafficFlowLayerRef.current?.setVisibility({
-            trafficConditions: effectiveViewerLayers.trafficConditions,
-            trafficFlow: effectiveViewerLayers.trafficFlow,
-          });
-
           map.addLayer({
             id: VEHICLE_ACCURACY_LAYER_ID,
             type: "circle",
@@ -765,33 +733,12 @@ export function CrashMap({
       isCancelled = true;
       popupRef.current?.remove();
       markerRef.current?.remove();
-      trafficFlowLayerRef.current?.dispose();
-      trafficFlowLayerRef.current = null;
       markerRef.current = null;
       createdMap?.remove();
       mapRef.current = null;
       setIsMapReady(false);
     };
   }, [token]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !isMapReady || !map.isStyleLoaded()) return;
-
-    const setLayerVisibility = (layerId: string, isVisible: boolean) => {
-      if (!map.getLayer(layerId)) return;
-      map.setLayoutProperty(layerId, "visibility", isVisible ? "visible" : "none");
-    };
-
-    setLayerVisibility(HEATMAP_LAYER_ID, effectiveViewerLayers.heatmap);
-    CRASH_MARKER_LAYER_IDS.forEach((layerId) =>
-      setLayerVisibility(layerId, effectiveViewerLayers.crashMarkers),
-    );
-    trafficFlowLayerRef.current?.setVisibility({
-      trafficConditions: effectiveViewerLayers.trafficConditions,
-      trafficFlow: effectiveViewerLayers.trafficFlow,
-    });
-  }, [effectiveViewerLayers, isMapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -852,9 +799,7 @@ export function CrashMap({
   }, [isMapReady]);
 
   const visualModeLabel =
-    !effectiveViewerLayers.crashMarkers && effectiveViewerLayers.trafficFlow
-      ? "Traffic flow particles show indicative road movement"
-      : mapZoom < CLUSTER_MIN_ZOOM
+    mapZoom < CLUSTER_MIN_ZOOM
       ? "Heat glow shows broad crash concentration"
       : mapZoom < POINT_MIN_ZOOM
         ? "Circles group nearby crashes by count and severity"
